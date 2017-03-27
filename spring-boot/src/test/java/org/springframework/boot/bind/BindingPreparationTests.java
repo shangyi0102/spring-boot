@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -186,7 +186,7 @@ public class BindingPreparationTests {
 		// what the user is trying to bind it to, e.g. if nested[foo][bar] then it's a map
 		wrapper.setPropertyValue("nested[foo]", new LinkedHashMap<String, Object>());
 		// But it might equally well be a collection, if nested[foo][0]
-		wrapper.setPropertyValue("nested[foo]", new ArrayList<Object>());
+		wrapper.setPropertyValue("nested[foo]", new ArrayList<>());
 		// Then it would have to be actually bound to get the list to auto-grow
 		wrapper.setPropertyValue("nested[foo][0]", "bar");
 		assertThat(wrapper.getPropertyValue("nested[foo][0]")).isNotNull();
@@ -222,7 +222,7 @@ public class BindingPreparationTests {
 	@Ignore("Work in progress")
 	public void testExpressionLists() throws Exception {
 		TargetWithNestedMapOfListOfString target = new TargetWithNestedMapOfListOfString();
-		LinkedHashMap<String, List<String>> map = new LinkedHashMap<String, List<String>>();
+		LinkedHashMap<String, List<String>> map = new LinkedHashMap<>();
 		// map.put("foo", Arrays.asList("bar"));
 		target.setNested(map);
 		SpelExpressionParser parser = new SpelExpressionParser();
@@ -233,6 +233,7 @@ public class BindingPreparationTests {
 	}
 
 	public static class TargetWithNestedMap {
+
 		private Map<String, Object> nested;
 
 		public Map<String, Object> getNested() {
@@ -242,9 +243,11 @@ public class BindingPreparationTests {
 		public void setNested(Map<String, Object> nested) {
 			this.nested = nested;
 		}
+
 	}
 
 	public static class TargetWithNestedMapOfListOfString {
+
 		private Map<String, List<String>> nested;
 
 		public Map<String, List<String>> getNested() {
@@ -254,9 +257,11 @@ public class BindingPreparationTests {
 		public void setNested(Map<String, List<String>> nested) {
 			this.nested = nested;
 		}
+
 	}
 
 	public static class TargetWithNestedListOfMaps {
+
 		private List<Map<String, String>> nested;
 
 		public List<Map<String, String>> getNested() {
@@ -266,9 +271,11 @@ public class BindingPreparationTests {
 		public void setNested(List<Map<String, String>> nested) {
 			this.nested = nested;
 		}
+
 	}
 
 	public static class TargetWithNestedListOfLists {
+
 		private List<List<String>> nested;
 
 		public List<List<String>> getNested() {
@@ -278,9 +285,11 @@ public class BindingPreparationTests {
 		public void setNested(List<List<String>> nested) {
 			this.nested = nested;
 		}
+
 	}
 
 	public static class TargetWithNestedListOfBeansWithList {
+
 		private List<TargetWithList> nested;
 
 		public List<TargetWithList> getNested() {
@@ -290,9 +299,11 @@ public class BindingPreparationTests {
 		public void setNested(List<TargetWithList> nested) {
 			this.nested = nested;
 		}
+
 	}
 
 	public static class TargetWithList {
+
 		private List<VanillaTarget> list;
 
 		public List<VanillaTarget> getList() {
@@ -306,6 +317,7 @@ public class BindingPreparationTests {
 	}
 
 	public static class TargetWithNestedMapOfBean {
+
 		private Map<String, VanillaTarget> nested;
 
 		public Map<String, VanillaTarget> getNested() {
@@ -315,6 +327,7 @@ public class BindingPreparationTests {
 		public void setNested(Map<String, VanillaTarget> nested) {
 			this.nested = nested;
 		}
+
 	}
 
 	public static class VanillaTarget {

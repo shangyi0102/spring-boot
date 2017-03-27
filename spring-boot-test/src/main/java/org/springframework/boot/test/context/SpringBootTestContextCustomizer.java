@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,9 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.boot.test.web.client.LocalHostUriTemplateHandler;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.client.TestRestTemplate.HttpClientOption;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -60,7 +62,7 @@ class SpringBootTestContextCustomizer implements ContextCustomizer {
 
 	private void registerTestRestTemplate(ConfigurableApplicationContext context,
 			BeanDefinitionRegistry registry) {
-		registry.registerBeanDefinition("testRestTemplate",
+		registry.registerBeanDefinition(TestRestTemplate.class.getName(),
 				new RootBeanDefinition(TestRestTemplateFactory.class));
 	}
 
@@ -83,16 +85,35 @@ class SpringBootTestContextCustomizer implements ContextCustomizer {
 	public static class TestRestTemplateFactory
 			implements FactoryBean<TestRestTemplate>, ApplicationContextAware {
 
+		private static final HttpClientOption[] DEFAULT_OPTIONS = {};
+
+		private static final HttpClientOption[] SSL_OPTIONS = { HttpClientOption.SSL };
+
 		private TestRestTemplate object;
 
 		@Override
 		public void setApplicationContext(ApplicationContext applicationContext)
 				throws BeansException {
 			RestTemplateBuilder builder = getRestTemplateBuilder(applicationContext);
-			TestRestTemplate template = new TestRestTemplate(builder.build());
-			template.setUriTemplateHandler(
-					new LocalHostUriTemplateHandler(applicationContext.getEnvironment()));
+			boolean sslEnabled = isSslEnabled(applicationContext);
+			TestRestTemplate template = new TestRestTemplate(builder.build(), null, null,
+					sslEnabled ? SSL_OPTIONS : DEFAULT_OPTIONS);
+			LocalHostUriTemplateHandler handler = new LocalHostUriTemplateHandler(
+					applicationContext.getEnvironment(), sslEnabled ? "https" : "http");
+			template.setUriTemplateHandler(handler);
 			this.object = template;
+		}
+
+		private boolean isSslEnabled(ApplicationContext context) {
+			try {
+				AbstractServletWebServerFactory webServerFactory = context
+						.getBean(AbstractServletWebServerFactory.class);
+				return webServerFactory.getSsl() != null
+						&& webServerFactory.getSsl().isEnabled();
+			}
+			catch (NoSuchBeanDefinitionException ex) {
+				return false;
+			}
 		}
 
 		private RestTemplateBuilder getRestTemplateBuilder(

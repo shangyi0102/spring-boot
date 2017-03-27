@@ -150,8 +150,8 @@ public class ConfigurationPropertiesReportEndpointSerializationTests {
 		Map<String, Object> map = (Map<String, Object>) nestedProperties
 				.get("properties");
 		assertThat(map).isNotNull();
-		assertThat(map).hasSize(3);
-		assertThat((map.get("map"))).isNull();
+		assertThat(map).hasSize(2);
+		assertThat(map).doesNotContainKey("map");
 	}
 
 	@Test
@@ -318,6 +318,7 @@ public class ConfigurationPropertiesReportEndpointSerializationTests {
 		}
 
 		public static class Bar {
+
 			private String name = "123456";
 
 			public String getName() {
@@ -327,6 +328,7 @@ public class ConfigurationPropertiesReportEndpointSerializationTests {
 			public void setName(String name) {
 				this.name = name;
 			}
+
 		}
 
 	}

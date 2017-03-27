@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ public class AnnotationsPropertySource extends EnumerablePropertySource<Class<?>
 	}
 
 	private Map<String, Object> getProperties(Class<?> source) {
-		Map<String, Object> properties = new LinkedHashMap<String, Object>();
+		Map<String, Object> properties = new LinkedHashMap<>();
 		collectProperties(source, source, properties, new HashSet<Class<?>>());
 		return Collections.unmodifiableMap(properties);
 	}
@@ -84,7 +84,7 @@ public class AnnotationsPropertySource extends EnumerablePropertySource<Class<?>
 	}
 
 	private List<Annotation> getMergedAnnotations(Class<?> root, Class<?> source) {
-		List<Annotation> mergedAnnotations = new ArrayList<Annotation>();
+		List<Annotation> mergedAnnotations = new ArrayList<>();
 		for (Annotation annotation : AnnotationUtils.getAnnotations(source)) {
 			if (!AnnotationUtils.isInJavaLangAnnotationPackage(annotation)) {
 				mergedAnnotations
@@ -109,20 +109,32 @@ public class AnnotationsPropertySource extends EnumerablePropertySource<Class<?>
 			PropertyMapping typeMapping, Map<String, Object> properties) {
 		PropertyMapping attributeMapping = AnnotationUtils.getAnnotation(attribute,
 				PropertyMapping.class);
-		if (isMapped(typeMapping, attributeMapping)) {
-			String name = getName(typeMapping, attributeMapping, attribute);
-			ReflectionUtils.makeAccessible(attribute);
-			Object value = ReflectionUtils.invokeMethod(attribute, annotation);
-			putProperties(name, value, properties);
+		SkipPropertyMapping skip = getMappingType(typeMapping, attributeMapping);
+		if (skip == SkipPropertyMapping.YES) {
+			return;
 		}
+		String name = getName(typeMapping, attributeMapping, attribute);
+		ReflectionUtils.makeAccessible(attribute);
+		Object value = ReflectionUtils.invokeMethod(attribute, annotation);
+		if (skip == SkipPropertyMapping.ON_DEFAULT_VALUE) {
+			Object defaultValue = AnnotationUtils.getDefaultValue(annotation,
+					attribute.getName());
+			if (ObjectUtils.nullSafeEquals(value, defaultValue)) {
+				return;
+			}
+		}
+		putProperties(name, value, properties);
 	}
 
-	private boolean isMapped(PropertyMapping typeMapping,
+	private SkipPropertyMapping getMappingType(PropertyMapping typeMapping,
 			PropertyMapping attributeMapping) {
 		if (attributeMapping != null) {
-			return attributeMapping.map();
+			return attributeMapping.skip();
 		}
-		return (typeMapping != null && typeMapping.map());
+		if (typeMapping != null) {
+			return typeMapping.skip();
+		}
+		return SkipPropertyMapping.YES;
 	}
 
 	private String getName(PropertyMapping typeMapping, PropertyMapping attributeMapping,

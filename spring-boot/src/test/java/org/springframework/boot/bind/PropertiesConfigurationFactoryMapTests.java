@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
 import org.junit.Test;
 
@@ -27,6 +28,7 @@ import org.springframework.context.support.StaticMessageSource;
 import org.springframework.core.env.CompositePropertySource;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.MutablePropertySources;
+import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.support.PropertiesLoaderUtils;
 import org.springframework.validation.Validator;
@@ -95,16 +97,18 @@ public class PropertiesConfigurationFactoryMapTests {
 		return bindFoo(values);
 	}
 
-	@Deprecated
 	private Foo bindFoo(final String values) throws Exception {
-		this.factory.setProperties(PropertiesLoaderUtils
-				.loadProperties(new ByteArrayResource(values.getBytes())));
+		Properties properties = PropertiesLoaderUtils
+				.loadProperties(new ByteArrayResource(values.getBytes()));
+		MutablePropertySources propertySources = new MutablePropertySources();
+		propertySources.addFirst(new PropertiesPropertySource("test", properties));
+		this.factory.setPropertySources(propertySources);
 		this.factory.afterPropertiesSet();
 		return this.factory.getObject();
 	}
 
 	private void setupFactory() throws IOException {
-		this.factory = new PropertiesConfigurationFactory<Foo>(Foo.class);
+		this.factory = new PropertiesConfigurationFactory<>(Foo.class);
 		this.factory.setValidator(this.validator);
 		this.factory.setTargetName(this.targetName);
 		this.factory.setIgnoreUnknownFields(this.ignoreUnknownFields);
@@ -113,7 +117,8 @@ public class PropertiesConfigurationFactoryMapTests {
 
 	// Foo needs to be public and to have setters for all properties
 	public static class Foo {
-		private Map<String, Object> map = new HashMap<String, Object>();
+
+		private Map<String, Object> map = new HashMap<>();
 
 		public Map<String, Object> getMap() {
 			return this.map;
@@ -122,6 +127,7 @@ public class PropertiesConfigurationFactoryMapTests {
 		public void setMap(Map<String, Object> map) {
 			this.map = map;
 		}
+
 	}
 
 }

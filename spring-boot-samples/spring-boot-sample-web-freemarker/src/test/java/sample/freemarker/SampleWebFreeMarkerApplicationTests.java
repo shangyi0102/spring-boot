@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.springframework.boot.context.embedded.LocalServerPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -47,13 +47,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DirtiesContext
 public class SampleWebFreeMarkerApplicationTests {
 
-	@LocalServerPort
-	private int port;
+	@Autowired
+	private TestRestTemplate testRestTemplate;
 
 	@Test
 	public void testFreeMarkerTemplate() throws Exception {
-		ResponseEntity<String> entity = new TestRestTemplate()
-				.getForEntity("http://localhost:" + this.port, String.class);
+		ResponseEntity<String> entity = this.testRestTemplate.getForEntity("/",
+				String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(entity.getBody()).contains("Hello, Andy");
 	}
@@ -62,11 +62,10 @@ public class SampleWebFreeMarkerApplicationTests {
 	public void testFreeMarkerErrorTemplate() throws Exception {
 		HttpHeaders headers = new HttpHeaders();
 		headers.setAccept(Arrays.asList(MediaType.TEXT_HTML));
-		HttpEntity<String> requestEntity = new HttpEntity<String>(headers);
+		HttpEntity<String> requestEntity = new HttpEntity<>(headers);
 
-		ResponseEntity<String> responseEntity = new TestRestTemplate().exchange(
-				"http://localhost:" + this.port + "/does-not-exist", HttpMethod.GET,
-				requestEntity, String.class);
+		ResponseEntity<String> responseEntity = this.testRestTemplate
+				.exchange("/does-not-exist", HttpMethod.GET, requestEntity, String.class);
 
 		assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 		assertThat(responseEntity.getBody())

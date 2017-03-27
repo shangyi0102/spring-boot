@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot.orm.jpa;
 
+import java.net.URL;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -39,15 +40,18 @@ import org.springframework.util.ClassUtils;
  *
  * @author Dave Syer
  * @author Phillip Webb
+ * @author Stephane Nicoll
  * @since 1.3.0
  */
 public class EntityManagerFactoryBuilder {
 
-	private JpaVendorAdapter jpaVendorAdapter;
+	private final JpaVendorAdapter jpaVendorAdapter;
 
-	private PersistenceUnitManager persistenceUnitManager;
+	private final PersistenceUnitManager persistenceUnitManager;
 
-	private Map<String, Object> jpaProperties;
+	private final Map<String, Object> jpaProperties;
+
+	private final URL persistenceUnitRootLocation;
 
 	private EntityManagerFactoryBeanCallback callback;
 
@@ -61,9 +65,27 @@ public class EntityManagerFactoryBuilder {
 	 */
 	public EntityManagerFactoryBuilder(JpaVendorAdapter jpaVendorAdapter,
 			Map<String, ?> jpaProperties, PersistenceUnitManager persistenceUnitManager) {
+		this(jpaVendorAdapter, jpaProperties, persistenceUnitManager, null);
+	}
+
+	/**
+	 * Create a new instance passing in the common pieces that will be shared if multiple
+	 * EntityManagerFactory instances are created.
+	 * @param jpaVendorAdapter a vendor adapter
+	 * @param jpaProperties JPA properties to be passed to the persistence provider.
+	 * @param persistenceUnitManager optional source of persistence unit information (can
+	 * be null)
+	 * @param persistenceUnitRootLocation the persistence unit root location to use as a
+	 * fallback (can be null)
+	 * @since 1.4.1
+	 */
+	public EntityManagerFactoryBuilder(JpaVendorAdapter jpaVendorAdapter,
+			Map<String, ?> jpaProperties, PersistenceUnitManager persistenceUnitManager,
+			URL persistenceUnitRootLocation) {
 		this.jpaVendorAdapter = jpaVendorAdapter;
 		this.persistenceUnitManager = persistenceUnitManager;
-		this.jpaProperties = new LinkedHashMap<String, Object>(jpaProperties);
+		this.jpaProperties = new LinkedHashMap<>(jpaProperties);
+		this.persistenceUnitRootLocation = persistenceUnitRootLocation;
 	}
 
 	public Builder dataSource(DataSource dataSource) {
@@ -89,7 +111,7 @@ public class EntityManagerFactoryBuilder {
 
 		private String persistenceUnit;
 
-		private Map<String, Object> properties = new HashMap<String, Object>();
+		private Map<String, Object> properties = new HashMap<>();
 
 		private boolean jta;
 
@@ -113,7 +135,7 @@ public class EntityManagerFactoryBuilder {
 		 * @return the builder for fluent usage
 		 */
 		public Builder packages(Class<?>... basePackageClasses) {
-			Set<String> packages = new HashSet<String>();
+			Set<String> packages = new HashSet<>();
 			for (Class<?> type : basePackageClasses) {
 				packages.add(ClassUtils.getPackageName(type));
 			}
@@ -181,6 +203,11 @@ public class EntityManagerFactoryBuilder {
 			entityManagerFactoryBean.getJpaPropertyMap()
 					.putAll(EntityManagerFactoryBuilder.this.jpaProperties);
 			entityManagerFactoryBean.getJpaPropertyMap().putAll(this.properties);
+			URL rootLocation = EntityManagerFactoryBuilder.this.persistenceUnitRootLocation;
+			if (rootLocation != null) {
+				entityManagerFactoryBean
+						.setPersistenceUnitRootLocation(rootLocation.toString());
+			}
 			if (EntityManagerFactoryBuilder.this.callback != null) {
 				EntityManagerFactoryBuilder.this.callback
 						.execute(entityManagerFactoryBean);
@@ -193,6 +220,7 @@ public class EntityManagerFactoryBuilder {
 	/**
 	 * A callback for new entity manager factory beans created by a Builder.
 	 */
+	@FunctionalInterface
 	public interface EntityManagerFactoryBeanCallback {
 
 		void execute(LocalContainerEntityManagerFactoryBean factory);

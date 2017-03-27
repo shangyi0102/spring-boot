@@ -16,6 +16,9 @@
 
 package org.springframework.boot.actuate.autoconfigure;
 
+import java.lang.annotation.Annotation;
+
+import org.springframework.boot.autoconfigure.condition.ConditionMessage;
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome;
 import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
 import org.springframework.boot.bind.RelaxedPropertyResolver;
@@ -33,20 +36,12 @@ abstract class OnEnabledEndpointElementCondition extends SpringBootCondition {
 
 	private final String prefix;
 
-	private final Class<?> annotationType;
+	private final Class<? extends Annotation> annotationType;
 
-	OnEnabledEndpointElementCondition(String prefix, Class<?> annotationType) {
+	OnEnabledEndpointElementCondition(String prefix,
+			Class<? extends Annotation> annotationType) {
 		this.prefix = prefix;
 		this.annotationType = annotationType;
-	}
-
-	protected String getEndpointElementOutcomeMessage(String name, boolean match) {
-		return "The endpoint element " + name + " is " + (match ? "enabled" : "disabled");
-	}
-
-	protected String getDefaultEndpointElementOutcomeMessage(boolean match) {
-		return "All default endpoint elements are " + (match ? "enabled" : "disabled")
-				+ " by default";
 	}
 
 	@Override
@@ -69,7 +64,8 @@ abstract class OnEnabledEndpointElementCondition extends SpringBootCondition {
 		if (resolver.containsProperty("enabled")) {
 			boolean match = resolver.getProperty("enabled", Boolean.class, true);
 			return new ConditionOutcome(match,
-					getEndpointElementOutcomeMessage(endpointName, match));
+					ConditionMessage.forCondition(this.annotationType).because(
+							this.prefix + endpointName + ".enabled is " + match));
 		}
 		return null;
 	}
@@ -79,7 +75,8 @@ abstract class OnEnabledEndpointElementCondition extends SpringBootCondition {
 				context.getEnvironment(), this.prefix + "defaults.");
 		boolean match = Boolean.valueOf(resolver.getProperty("enabled", "true"));
 		return new ConditionOutcome(match,
-				getDefaultEndpointElementOutcomeMessage(match));
+				ConditionMessage.forCondition(this.annotationType).because(
+						this.prefix + "defaults.enabled is considered " + match));
 	}
 
 }

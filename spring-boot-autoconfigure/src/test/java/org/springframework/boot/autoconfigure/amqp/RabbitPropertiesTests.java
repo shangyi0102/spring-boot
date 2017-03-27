@@ -122,7 +122,7 @@ public class RabbitPropertiesTests {
 	}
 
 	@Test
-	public void determinedVirtualHostIsSlashWhenAddressHasTrailingSlash() {
+	public void determineVirtualHostIsSlashWhenAddressHasTrailingSlash() {
 		this.properties.setAddresses("amqp://root:password@otherhost:1111/");
 		assertThat(this.properties.determineVirtualHost()).isEqualTo("/");
 	}
@@ -199,21 +199,21 @@ public class RabbitPropertiesTests {
 
 	@Test
 	public void addressesDefaultsToNull() {
-		assertThat(this.properties.getAddresses()).isEqualTo(null);
+		assertThat(this.properties.getAddresses()).isNull();
 	}
 
 	@Test
 	public void customAddresses() {
 		this.properties.setAddresses(
-				"user:secrect@rabbit1.example.com:1234/alpha,rabbit2.example.com");
+				"user:secret@rabbit1.example.com:1234/alpha,rabbit2.example.com");
 		assertThat(this.properties.getAddresses()).isEqualTo(
-				"user:secrect@rabbit1.example.com:1234/alpha,rabbit2.example.com");
+				"user:secret@rabbit1.example.com:1234/alpha,rabbit2.example.com");
 	}
 
 	@Test
 	public void determineAddressesReturnsAddressesWithJustHostAndPort() {
 		this.properties.setAddresses(
-				"user:secrect@rabbit1.example.com:1234/alpha,rabbit2.example.com");
+				"user:secret@rabbit1.example.com:1234/alpha,rabbit2.example.com");
 		assertThat(this.properties.determineAddresses())
 				.isEqualTo("rabbit1.example.com:1234,rabbit2.example.com:5672");
 	}

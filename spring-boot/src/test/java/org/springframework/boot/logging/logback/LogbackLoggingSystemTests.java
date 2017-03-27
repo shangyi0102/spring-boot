@@ -18,11 +18,15 @@ package org.springframework.boot.logging.logback;
 
 import java.io.File;
 import java.io.FileReader;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.logging.Handler;
 import java.util.logging.LogManager;
 
+import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.LoggerContextListener;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.impl.SLF4JLogFactory;
 import org.hamcrest.Matcher;
@@ -38,7 +42,9 @@ import org.slf4j.impl.StaticLoggerBinder;
 import org.springframework.boot.logging.AbstractLoggingSystemTests;
 import org.springframework.boot.logging.LogFile;
 import org.springframework.boot.logging.LogLevel;
+import org.springframework.boot.logging.LoggerConfiguration;
 import org.springframework.boot.logging.LoggingInitializationContext;
+import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.boot.testutil.InternalOutputCapture;
 import org.springframework.boot.testutil.Matched;
 import org.springframework.mock.env.MockEnvironment;
@@ -48,6 +54,9 @@ import org.springframework.util.StringUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * Tests for {@link LogbackLoggingSystem}.
@@ -55,6 +64,8 @@ import static org.hamcrest.Matchers.not;
  * @author Dave Syer
  * @author Phillip Webb
  * @author Andy Wilkinson
+ * @author Ben Hale
+ * @author Madhura Bhave
  */
 public class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 
@@ -72,6 +83,7 @@ public class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 
 	@Before
 	public void setup() {
+		this.loggingSystem.cleanUp();
 		this.logger = new SLF4JLogFactory().getInstance(getClass().getName());
 		this.environment = new MockEnvironment();
 		this.initializationContext = new LoggingInitializationContext(this.environment);
@@ -155,6 +167,13 @@ public class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 	}
 
 	@Test
+	public void getSupportedLevels() {
+		assertThat(this.loggingSystem.getSupportedLogLevels())
+				.isEqualTo(EnumSet.of(LogLevel.TRACE, LogLevel.DEBUG, LogLevel.INFO,
+						LogLevel.WARN, LogLevel.ERROR, LogLevel.OFF));
+	}
+
+	@Test
 	public void setLevel() throws Exception {
 		this.loggingSystem.beforeInitialize();
 		this.loggingSystem.initialize(this.initializationContext, null, null);
@@ -163,6 +182,50 @@ public class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 		this.logger.debug("Hello");
 		assertThat(StringUtils.countOccurrencesOf(this.output.toString(), "Hello"))
 				.isEqualTo(1);
+	}
+
+	@Test
+	public void getLoggingConfigurations() throws Exception {
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(this.initializationContext, null, null);
+		this.loggingSystem.setLogLevel(getClass().getName(), LogLevel.DEBUG);
+		List<LoggerConfiguration> configurations = this.loggingSystem
+				.getLoggerConfigurations();
+		assertThat(configurations).isNotEmpty();
+		assertThat(configurations.get(0).getName())
+				.isEqualTo(LoggingSystem.ROOT_LOGGER_NAME);
+	}
+
+	@Test
+	public void getLoggingConfiguration() throws Exception {
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(this.initializationContext, null, null);
+		this.loggingSystem.setLogLevel(getClass().getName(), LogLevel.DEBUG);
+		LoggerConfiguration configuration = this.loggingSystem
+				.getLoggerConfiguration(getClass().getName());
+		assertThat(configuration).isEqualTo(new LoggerConfiguration(getClass().getName(),
+				LogLevel.DEBUG, LogLevel.DEBUG));
+	}
+
+	@Test
+	public void getLoggingConfigurationForALL() throws Exception {
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(this.initializationContext, null, null);
+		Logger logger = this.loggingSystem.getLogger(getClass().getName());
+		logger.setLevel(Level.ALL);
+		LoggerConfiguration configuration = this.loggingSystem
+				.getLoggerConfiguration(getClass().getName());
+		assertThat(configuration).isEqualTo(new LoggerConfiguration(getClass().getName(),
+				LogLevel.TRACE, LogLevel.TRACE));
+	}
+
+	@Test
+	public void systemLevelTraceShouldReturnNativeLevelTraceNotAll() throws Exception {
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(this.initializationContext, null, null);
+		this.loggingSystem.setLogLevel(getClass().getName(), LogLevel.TRACE);
+		Logger logger = this.loggingSystem.getLogger(getClass().getName());
+		assertThat(logger.getLevel()).isEqualTo(Level.TRACE);
 	}
 
 	@Test
@@ -304,15 +367,32 @@ public class LogbackLoggingSystemTests extends AbstractLoggingSystemTests {
 	}
 
 	@Test
-	public void reinitializeShouldSetSystemProperty() throws Exception {
+	public void initializeShouldSetSystemProperty() throws Exception {
 		// gh-5491
 		this.loggingSystem.beforeInitialize();
 		this.logger.info("Hidden");
-		this.loggingSystem.initialize(this.initializationContext, null, null);
 		LogFile logFile = getLogFile(tmpDir() + "/example.log", null, false);
 		this.loggingSystem.initialize(this.initializationContext,
 				"classpath:logback-nondefault.xml", logFile);
 		assertThat(System.getProperty("LOG_FILE")).endsWith("example.log");
+	}
+
+	@Test
+	public void initializationIsOnlyPerformedOnceUntilCleanedUp() throws Exception {
+		LoggerContext loggerContext = (LoggerContext) StaticLoggerBinder.getSingleton()
+				.getLoggerFactory();
+		LoggerContextListener listener = mock(LoggerContextListener.class);
+		loggerContext.addListener(listener);
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(this.initializationContext, null, null);
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(this.initializationContext, null, null);
+		verify(listener, times(1)).onReset(loggerContext);
+		this.loggingSystem.cleanUp();
+		loggerContext.addListener(listener);
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(this.initializationContext, null, null);
+		verify(listener, times(2)).onReset(loggerContext);
 	}
 
 	private String getLineWithText(File file, String outputSearch) throws Exception {

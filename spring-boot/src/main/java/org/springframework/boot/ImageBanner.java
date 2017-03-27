@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015 the original author or authors.
+ * Copyright 2012-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ import org.springframework.util.Assert;
  */
 public class ImageBanner implements Banner {
 
-	private static final Log log = LogFactory.getLog(ImageBanner.class);
+	private static final Log logger = LogFactory.getLog(ImageBanner.class);
 
 	private static final double[] RGB_WEIGHT = { 0.2126d, 0.7152d, 0.0722d };
 
@@ -75,9 +75,10 @@ public class ImageBanner implements Banner {
 			System.setProperty("java.awt.headless", "true");
 			printBanner(environment, out);
 		}
-		catch (Exception ex) {
-			log.warn("Image banner not printable: " + this.image + " (" + ex.getClass()
-					+ ": '" + ex.getMessage() + "')", ex);
+		catch (Throwable ex) {
+			logger.warn("Image banner not printable: " + this.image + " (" + ex.getClass()
+					+ ": '" + ex.getMessage() + "')");
+			logger.debug("Image banner printing failure", ex);
 		}
 		finally {
 			if (headless == null) {

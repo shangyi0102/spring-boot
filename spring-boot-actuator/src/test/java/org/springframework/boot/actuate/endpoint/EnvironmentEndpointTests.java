@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.springframework.boot.actuate.endpoint;
 import java.util.Collections;
 import java.util.Map;
 
+import org.junit.After;
 import org.junit.Test;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -38,11 +39,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Christian Dupuis
  * @author Nicolas Lejeune
  * @author Stephane Nicoll
+ * @author Madhura Bhave
  */
 public class EnvironmentEndpointTests extends AbstractEndpointTests<EnvironmentEndpoint> {
 
 	public EnvironmentEndpointTests() {
 		super(Config.class, EnvironmentEndpoint.class, "env", true, "endpoints.env");
+	}
+
+	@Override
+	@After
+	public void close() {
+		System.clearProperty("VCAP_SERVICES");
 	}
 
 	@Test
@@ -187,6 +195,66 @@ public class EnvironmentEndpointTests extends AbstractEndpointTests<EnvironmentE
 		assertThat(systemProperties.get("apiKey")).isEqualTo("******");
 	}
 
+	@SuppressWarnings("unchecked")
+	@Test
+	public void propertyWithPlaceholderResolved() throws Exception {
+		this.context = new AnnotationConfigApplicationContext();
+		EnvironmentTestUtils.addEnvironment(this.context,
+				"my.foo: ${bar.blah}", "bar.blah: hello");
+		this.context.register(Config.class);
+		this.context.refresh();
+		EnvironmentEndpoint report = getEndpointBean();
+		Map<String, Object> env = report.invoke();
+		Map<String, Object> testProperties = (Map<String, Object>) env
+				.get("test");
+		assertThat(testProperties.get("my.foo")).isEqualTo("hello");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	public void propertyWithPlaceholderNotResolved() throws Exception {
+		this.context = new AnnotationConfigApplicationContext();
+		EnvironmentTestUtils.addEnvironment(this.context,
+				"my.foo: ${bar.blah}");
+		this.context.register(Config.class);
+		this.context.refresh();
+		EnvironmentEndpoint report = getEndpointBean();
+		Map<String, Object> env = report.invoke();
+		Map<String, Object> testProperties = (Map<String, Object>) env
+				.get("test");
+		assertThat(testProperties.get("my.foo")).isEqualTo("${bar.blah}");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	public void propertyWithSensitivePlaceholderResolved() throws Exception {
+		this.context = new AnnotationConfigApplicationContext();
+		EnvironmentTestUtils.addEnvironment(this.context,
+				"my.foo: http://${bar.password}://hello", "bar.password: hello");
+		this.context.register(Config.class);
+		this.context.refresh();
+		EnvironmentEndpoint report = getEndpointBean();
+		Map<String, Object> env = report.invoke();
+		Map<String, Object> testProperties = (Map<String, Object>) env
+				.get("test");
+		assertThat(testProperties.get("my.foo")).isEqualTo("http://******://hello");
+	}
+
+	@SuppressWarnings("unchecked")
+	@Test
+	public void propertyWithSensitivePlaceholderNotResolved() throws Exception {
+		this.context = new AnnotationConfigApplicationContext();
+		EnvironmentTestUtils.addEnvironment(this.context,
+				"my.foo: http://${bar.password}://hello");
+		this.context.register(Config.class);
+		this.context.refresh();
+		EnvironmentEndpoint report = getEndpointBean();
+		Map<String, Object> env = report.invoke();
+		Map<String, Object> testProperties = (Map<String, Object>) env
+				.get("test");
+		assertThat(testProperties.get("my.foo")).isEqualTo("http://${bar.password}://hello");
+	}
+
 	@Configuration
 	@EnableConfigurationProperties
 	public static class Config {
@@ -197,4 +265,5 @@ public class EnvironmentEndpointTests extends AbstractEndpointTests<EnvironmentE
 		}
 
 	}
+
 }

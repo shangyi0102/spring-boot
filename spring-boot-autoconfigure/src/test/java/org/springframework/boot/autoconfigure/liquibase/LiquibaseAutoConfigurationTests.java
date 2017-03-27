@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package org.springframework.boot.autoconfigure.liquibase;
 import java.io.File;
 import java.util.Map;
 
+import javax.sql.DataSource;
+
 import liquibase.integration.spring.SpringLiquibase;
 import org.junit.After;
 import org.junit.Before;
@@ -28,11 +30,17 @@ import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 
 import org.springframework.beans.factory.BeanCreationException;
-import org.springframework.boot.autoconfigure.PropertyPlaceholderAutoConfiguration;
+import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceBuilder;
 import org.springframework.boot.autoconfigure.jdbc.EmbeddedDataSourceConfiguration;
 import org.springframework.boot.liquibase.CommonsLoggingLiquibaseLogger;
+import org.springframework.boot.liquibase.LiquibaseServiceLocatorApplicationListener;
+import org.springframework.boot.test.rule.OutputCapture;
 import org.springframework.boot.test.util.EnvironmentTestUtils;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.FileCopyUtils;
 
@@ -42,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests for {@link LiquibaseAutoConfiguration}.
  *
  * @author Marcel Overdijk
+ * @author Eddú Meléndez
  * @author Andy Wilkinson
  */
 public class LiquibaseAutoConfigurationTests {
@@ -52,12 +61,16 @@ public class LiquibaseAutoConfigurationTests {
 	@Rule
 	public TemporaryFolder temp = new TemporaryFolder();
 
+	@Rule
+	public OutputCapture outputCapture = new OutputCapture();
+
 	private AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
 
 	@Before
 	public void init() {
 		EnvironmentTestUtils.addEnvironment(this.context,
 				"spring.datasource.name:liquibasetest");
+		new LiquibaseServiceLocatorApplicationListener().onApplicationEvent(null);
 	}
 
 	@After
@@ -196,6 +209,7 @@ public class LiquibaseAutoConfigurationTests {
 		SpringLiquibase liquibase = this.context.getBean(SpringLiquibase.class);
 		Object log = ReflectionTestUtils.getField(liquibase, "log");
 		assertThat(log).isInstanceOf(CommonsLoggingLiquibaseLogger.class);
+		assertThat(this.outputCapture.toString()).doesNotContain(": liquibase:");
 	}
 
 	@Test
@@ -239,6 +253,36 @@ public class LiquibaseAutoConfigurationTests {
 		assertThat(actualFile).isEqualTo(file).exists();
 		String content = new String(FileCopyUtils.copyToByteArray(file));
 		assertThat(content).contains("DROP TABLE PUBLIC.customer;");
+	}
+
+	@Test
+	public void testLiquibaseDataSource() {
+		this.context.register(LiquibaseDataSourceConfiguration.class,
+				EmbeddedDataSourceConfiguration.class, LiquibaseAutoConfiguration.class,
+				PropertyPlaceholderAutoConfiguration.class);
+		this.context.refresh();
+		SpringLiquibase liquibase = this.context.getBean(SpringLiquibase.class);
+		assertThat(liquibase.getDataSource())
+				.isEqualTo(this.context.getBean("liquibaseDataSource"));
+	}
+
+	@Configuration
+	static class LiquibaseDataSourceConfiguration {
+
+		@Bean
+		@Primary
+		public DataSource normalDataSource() {
+			return DataSourceBuilder.create().url("jdbc:hsqldb:mem:normal").username("sa")
+					.build();
+		}
+
+		@LiquibaseDataSource
+		@Bean
+		public DataSource liquibaseDataSource() {
+			return DataSourceBuilder.create().url("jdbc:hsqldb:mem:liquibasetest")
+					.username("sa").build();
+		}
+
 	}
 
 }

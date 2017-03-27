@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,6 +58,15 @@ import org.springframework.util.Assert;
 public class JacksonTester<T> extends AbstractJsonMarshalTester<T> {
 
 	private final ObjectMapper objectMapper;
+
+	/**
+	 * Create a new {@link JacksonTester} instance.
+	 * @param objectMapper the Jackson object mapper
+	 */
+	protected JacksonTester(ObjectMapper objectMapper) {
+		Assert.notNull(objectMapper, "ObjectMapper must not be null");
+		this.objectMapper = objectMapper;
+	}
 
 	/**
 	 * Create a new {@link JacksonTester} instance.
@@ -128,7 +137,7 @@ public class JacksonTester<T> extends AbstractJsonMarshalTester<T> {
 		protected AbstractJsonMarshalTester<Object> createTester(
 				Class<?> resourceLoadClass, ResolvableType type,
 				ObjectMapper marshaller) {
-			return new JacksonTester<Object>(resourceLoadClass, type, marshaller);
+			return new JacksonTester<>(resourceLoadClass, type, marshaller);
 		}
 
 	}

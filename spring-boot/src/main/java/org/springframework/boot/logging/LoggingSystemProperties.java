@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,28 +19,60 @@ package org.springframework.boot.logging;
 import org.springframework.boot.ApplicationPid;
 import org.springframework.boot.bind.RelaxedPropertyResolver;
 import org.springframework.core.env.Environment;
+import org.springframework.util.Assert;
 
 /**
  * Utility to set system properties that can later be used by log configuration files.
  *
  * @author Andy Wilkinson
  * @author Phillip Webb
+ * @since 2.0.0
  */
-class LoggingSystemProperties {
+public class LoggingSystemProperties {
 
-	static final String PID_KEY = "PID";
+	/**
+	 * The name of the System property that contains the process ID.
+	 */
+	public static final String PID_KEY = "PID";
 
-	static final String EXCEPTION_CONVERSION_WORD = "LOG_EXCEPTION_CONVERSION_WORD";
+	/**
+	 * The name of the System property that contains the exception conversion word.
+	 */
+	public static final String EXCEPTION_CONVERSION_WORD = "LOG_EXCEPTION_CONVERSION_WORD";
 
-	static final String CONSOLE_LOG_PATTERN = "CONSOLE_LOG_PATTERN";
+	/**
+	 * The name of the System property that contains the log file.
+	 */
+	public static final String LOG_FILE = "LOG_FILE";
 
-	static final String FILE_LOG_PATTERN = "FILE_LOG_PATTERN";
+	/**
+	 * The name of the System property that contains the log path.
+	 */
+	public static final String LOG_PATH = "LOG_PATH";
 
-	static final String LOG_LEVEL_PATTERN = "LOG_LEVEL_PATTERN";
+	/**
+	 * The name of the System property that contains the console log pattern.
+	 */
+	public static final String CONSOLE_LOG_PATTERN = "CONSOLE_LOG_PATTERN";
+
+	/**
+	 * The name of the System property that contains the file log pattern.
+	 */
+	public static final String FILE_LOG_PATTERN = "FILE_LOG_PATTERN";
+
+	/**
+	 * The name of the System property that contains the log level pattern.
+	 */
+	public static final String LOG_LEVEL_PATTERN = "LOG_LEVEL_PATTERN";
 
 	private final Environment environment;
 
-	LoggingSystemProperties(Environment environment) {
+	/**
+	 * Create a new {@link LoggingSystemProperties} instance.
+	 * @param environment the source environment
+	 */
+	public LoggingSystemProperties(Environment environment) {
+		Assert.notNull(environment, "Environment must not be null");
 		this.environment = environment;
 	}
 
@@ -49,8 +81,8 @@ class LoggingSystemProperties {
 	}
 
 	public void apply(LogFile logFile) {
-		RelaxedPropertyResolver propertyResolver = new RelaxedPropertyResolver(
-				this.environment, "logging.");
+		RelaxedPropertyResolver propertyResolver = RelaxedPropertyResolver
+				.ignoringUnresolvableNestedPlaceholders(this.environment, "logging.");
 		setSystemProperty(propertyResolver, EXCEPTION_CONVERSION_WORD,
 				"exception-conversion-word");
 		setSystemProperty(propertyResolver, CONSOLE_LOG_PATTERN, "pattern.console");

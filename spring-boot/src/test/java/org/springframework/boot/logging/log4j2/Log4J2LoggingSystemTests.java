@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,19 @@
 
 package org.springframework.boot.logging.log4j2;
 
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
@@ -35,6 +39,8 @@ import org.junit.Test;
 
 import org.springframework.boot.logging.AbstractLoggingSystemTests;
 import org.springframework.boot.logging.LogLevel;
+import org.springframework.boot.logging.LoggerConfiguration;
+import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.boot.testutil.InternalOutputCapture;
 import org.springframework.boot.testutil.Matched;
 import org.springframework.util.FileCopyUtils;
@@ -43,6 +49,10 @@ import org.springframework.util.StringUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * Tests for {@link Log4J2LoggingSystem}.
@@ -50,6 +60,7 @@ import static org.hamcrest.Matchers.not;
  * @author Daniel Fullarton
  * @author Phillip Webb
  * @author Andy Wilkinson
+ * @author Ben Hale
  */
 public class Log4J2LoggingSystemTests extends AbstractLoggingSystemTests {
 
@@ -62,6 +73,7 @@ public class Log4J2LoggingSystemTests extends AbstractLoggingSystemTests {
 
 	@Before
 	public void setup() {
+		this.loggingSystem.cleanUp();
 		this.logger = LogManager.getLogger(getClass());
 	}
 
@@ -113,6 +125,12 @@ public class Log4J2LoggingSystemTests extends AbstractLoggingSystemTests {
 	}
 
 	@Test
+	public void getSupportedLevels() {
+		assertThat(this.loggingSystem.getSupportedLogLevels())
+				.isEqualTo(EnumSet.allOf(LogLevel.class));
+	}
+
+	@Test
 	public void setLevel() throws Exception {
 		this.loggingSystem.beforeInitialize();
 		this.loggingSystem.initialize(null, null, null);
@@ -121,6 +139,29 @@ public class Log4J2LoggingSystemTests extends AbstractLoggingSystemTests {
 		this.logger.debug("Hello");
 		assertThat(StringUtils.countOccurrencesOf(this.output.toString(), "Hello"))
 				.isEqualTo(1);
+	}
+
+	@Test
+	public void getLoggingConfigurations() throws Exception {
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(null, null, null);
+		this.loggingSystem.setLogLevel(getClass().getName(), LogLevel.DEBUG);
+		List<LoggerConfiguration> configurations = this.loggingSystem
+				.getLoggerConfigurations();
+		assertThat(configurations).isNotEmpty();
+		assertThat(configurations.get(0).getName())
+				.isEqualTo(LoggingSystem.ROOT_LOGGER_NAME);
+	}
+
+	@Test
+	public void getLoggingConfiguration() throws Exception {
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(null, null, null);
+		this.loggingSystem.setLogLevel(getClass().getName(), LogLevel.DEBUG);
+		LoggerConfiguration configuration = this.loggingSystem
+				.getLoggerConfiguration(getClass().getName());
+		assertThat(configuration).isEqualTo(new LoggerConfiguration(getClass().getName(),
+				LogLevel.DEBUG, LogLevel.DEBUG));
 	}
 
 	@Test
@@ -223,9 +264,27 @@ public class Log4J2LoggingSystemTests extends AbstractLoggingSystemTests {
 		}
 	}
 
+	@Test
+	public void initializationIsOnlyPerformedOnceUntilCleanedUp() throws Exception {
+		LoggerContext loggerContext = (LoggerContext) LogManager.getContext(false);
+		PropertyChangeListener listener = mock(PropertyChangeListener.class);
+		loggerContext.addPropertyChangeListener(listener);
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(null, null, null);
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(null, null, null);
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(null, null, null);
+		verify(listener, times(2)).propertyChange(any(PropertyChangeEvent.class));
+		this.loggingSystem.cleanUp();
+		this.loggingSystem.beforeInitialize();
+		this.loggingSystem.initialize(null, null, null);
+		verify(listener, times(4)).propertyChange(any(PropertyChangeEvent.class));
+	}
+
 	private static class TestLog4J2LoggingSystem extends Log4J2LoggingSystem {
 
-		private List<String> availableClasses = new ArrayList<String>();
+		private List<String> availableClasses = new ArrayList<>();
 
 		TestLog4J2LoggingSystem() {
 			super(TestLog4J2LoggingSystem.class.getClassLoader());

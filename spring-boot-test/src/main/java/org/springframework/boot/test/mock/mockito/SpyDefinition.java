@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ package org.springframework.boot.test.mock.mockito;
 
 import org.mockito.MockSettings;
 import org.mockito.Mockito;
-import org.mockito.internal.util.MockUtil;
 
+import org.springframework.core.ResolvableType;
 import org.springframework.core.style.ToStringCreator;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
@@ -32,28 +32,26 @@ import org.springframework.util.StringUtils;
  */
 class SpyDefinition extends Definition {
 
-	private MockUtil mockUtil = new MockUtil();
-
 	private static final int MULTIPLIER = 31;
 
-	private final Class<?> classToSpy;
+	private final ResolvableType typeToSpy;
 
-	SpyDefinition(String name, Class<?> classToSpy, MockReset reset,
-			boolean proxyTargetAware) {
-		super(name, reset, proxyTargetAware);
-		Assert.notNull(classToSpy, "ClassToSpy must not be null");
-		this.classToSpy = classToSpy;
+	SpyDefinition(String name, ResolvableType typeToSpy, MockReset reset,
+			boolean proxyTargetAware, QualifierDefinition qualifier) {
+		super(name, reset, proxyTargetAware, qualifier);
+		Assert.notNull(typeToSpy, "TypeToSpy must not be null");
+		this.typeToSpy = typeToSpy;
 
 	}
 
-	public Class<?> getClassToSpy() {
-		return this.classToSpy;
+	public ResolvableType getTypeToSpy() {
+		return this.typeToSpy;
 	}
 
 	@Override
 	public int hashCode() {
 		int result = super.hashCode();
-		result = MULTIPLIER * result + ObjectUtils.nullSafeHashCode(this.classToSpy);
+		result = MULTIPLIER * result + ObjectUtils.nullSafeHashCode(this.typeToSpy);
 		return result;
 	}
 
@@ -67,14 +65,14 @@ class SpyDefinition extends Definition {
 		}
 		SpyDefinition other = (SpyDefinition) obj;
 		boolean result = super.equals(obj);
-		result &= ObjectUtils.nullSafeEquals(this.classToSpy, other.classToSpy);
+		result = result && ObjectUtils.nullSafeEquals(this.typeToSpy, other.typeToSpy);
 		return result;
 	}
 
 	@Override
 	public String toString() {
 		return new ToStringCreator(this).append("name", getName())
-				.append("classToSpy", this.classToSpy).append("reset", getReset())
+				.append("typeToSpy", this.typeToSpy).append("reset", getReset())
 				.toString();
 	}
 
@@ -85,8 +83,8 @@ class SpyDefinition extends Definition {
 	@SuppressWarnings("unchecked")
 	public <T> T createSpy(String name, Object instance) {
 		Assert.notNull(instance, "Instance must not be null");
-		Assert.isInstanceOf(this.classToSpy, instance);
-		if (this.mockUtil.isSpy(instance)) {
+		Assert.isInstanceOf(this.typeToSpy.resolve(), instance);
+		if (Mockito.mockingDetails(instance).isSpy()) {
 			return (T) instance;
 		}
 		MockSettings settings = MockReset.withSettings(getReset());

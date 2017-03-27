@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,22 @@
 package org.springframework.boot.loader;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
+import org.junit.rules.TemporaryFolder;
 import org.mockito.MockitoAnnotations;
 
 import org.springframework.boot.loader.archive.Archive;
@@ -44,6 +50,12 @@ public class PropertiesLauncherTests {
 
 	@Rule
 	public InternalOutputCapture output = new InternalOutputCapture();
+
+	@Rule
+	public ExpectedException expected = ExpectedException.none();
+
+	@Rule
+	public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
 	@Before
 	public void setup() throws IOException {
@@ -64,9 +76,28 @@ public class PropertiesLauncherTests {
 
 	@Test
 	public void testDefaultHome() {
+		System.clearProperty("loader.home");
+		PropertiesLauncher launcher = new PropertiesLauncher();
+		assertThat(launcher.getHomeDirectory())
+				.isEqualTo(new File(System.getProperty("user.dir")));
+	}
+
+	@Test
+	public void testAlternateHome() throws Exception {
+		System.setProperty("loader.home", "src/test/resources/home");
 		PropertiesLauncher launcher = new PropertiesLauncher();
 		assertThat(launcher.getHomeDirectory())
 				.isEqualTo(new File(System.getProperty("loader.home")));
+		assertThat(launcher.getMainClass()).isEqualTo("demo.HomeApplication");
+	}
+
+	@Test
+	public void testNonExistentHome() throws Exception {
+		System.setProperty("loader.home", "src/test/resources/nonexistent");
+		this.expected.expectMessage("Invalid source folder");
+		PropertiesLauncher launcher = new PropertiesLauncher();
+		assertThat(launcher.getHomeDirectory())
+				.isNotEqualTo(new File(System.getProperty("loader.home")));
 	}
 
 	@Test
@@ -83,6 +114,13 @@ public class PropertiesLauncherTests {
 		assertThat(launcher.getMainClass()).isEqualTo("my.Application");
 		assertThat(ReflectionTestUtils.getField(launcher, "paths").toString())
 				.isEqualTo("[etc/]");
+	}
+
+	@Test
+	public void testRootOfClasspathFirst() throws Exception {
+		System.setProperty("loader.config.name", "bar");
+		PropertiesLauncher launcher = new PropertiesLauncher();
+		assertThat(launcher.getMainClass()).isEqualTo("my.BarApplication");
 	}
 
 	@Test
@@ -207,6 +245,30 @@ public class PropertiesLauncherTests {
 				.isEqualTo("[foo, bar]");
 	}
 
+	@SuppressWarnings("unchecked")
+	@Test
+	public void testLoadPathCustomizedUsingManifest() throws Exception {
+		System.setProperty("loader.home",
+				this.temporaryFolder.getRoot().getAbsolutePath());
+		Manifest manifest = new Manifest();
+		manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+		manifest.getMainAttributes().putValue("Loader-Path", "/foo.jar, /bar");
+		File manifestFile = new File(this.temporaryFolder.getRoot(),
+				"META-INF/MANIFEST.MF");
+		manifestFile.getParentFile().mkdirs();
+		manifest.write(new FileOutputStream(manifestFile));
+		PropertiesLauncher launcher = new PropertiesLauncher();
+		assertThat((List<String>) ReflectionTestUtils.getField(launcher, "paths"))
+				.containsExactly("/foo.jar", "/bar/");
+	}
+
+	@Test
+	public void testManifestWithPlaceholders() throws Exception {
+		System.setProperty("loader.home", "src/test/resources/placeholders");
+		PropertiesLauncher launcher = new PropertiesLauncher();
+		assertThat(launcher.getMainClass()).isEqualTo("demo.FooApplication");
+	}
+
 	private void waitFor(String value) throws Exception {
 		int count = 0;
 		boolean timeout = false;
@@ -228,6 +290,7 @@ public class PropertiesLauncherTests {
 		protected Class<?> findClass(String name) throws ClassNotFoundException {
 			return super.findClass(name);
 		}
+
 	}
 
 }

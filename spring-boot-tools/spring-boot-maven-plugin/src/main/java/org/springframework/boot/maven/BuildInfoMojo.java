@@ -22,12 +22,15 @@ import java.util.Map;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.sonatype.plexus.build.incremental.BuildContext;
 
 import org.springframework.boot.loader.tools.BuildPropertiesWriter;
+import org.springframework.boot.loader.tools.BuildPropertiesWriter.NullAdditionalPropertyValueException;
 import org.springframework.boot.loader.tools.BuildPropertiesWriter.ProjectDetails;
 
 /**
@@ -39,6 +42,9 @@ import org.springframework.boot.loader.tools.BuildPropertiesWriter.ProjectDetail
  */
 @Mojo(name = "build-info", defaultPhase = LifecyclePhase.GENERATE_RESOURCES, threadSafe = true)
 public class BuildInfoMojo extends AbstractMojo {
+
+	@Component
+	private BuildContext buildContext;
 
 	/**
 	 * The Maven project.
@@ -53,8 +59,8 @@ public class BuildInfoMojo extends AbstractMojo {
 	private File outputFile;
 
 	/**
-	 * Additional properties to store in the build-info.properties. Each entry is prefixed by
-	 * {@code build.} in the generated build-info.properties.
+	 * Additional properties to store in the build-info.properties. Each entry is prefixed
+	 * by {@code build.} in the generated build-info.properties.
 	 */
 	@Parameter
 	private Map<String, String> additionalProperties;
@@ -66,6 +72,11 @@ public class BuildInfoMojo extends AbstractMojo {
 					.writeBuildProperties(new ProjectDetails(this.project.getGroupId(),
 							this.project.getArtifactId(), this.project.getVersion(),
 							this.project.getName(), this.additionalProperties));
+			this.buildContext.refresh(this.outputFile);
+		}
+		catch (NullAdditionalPropertyValueException ex) {
+			throw new MojoFailureException(
+					"Failed to generate build-info.properties. " + ex.getMessage(), ex);
 		}
 		catch (Exception ex) {
 			throw new MojoExecutionException(ex.getMessage(), ex);

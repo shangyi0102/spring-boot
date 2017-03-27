@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import java.util.zip.GZIPInputStream;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.springframework.boot.context.embedded.LocalServerPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -49,13 +49,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DirtiesContext
 public class SampleJettyApplicationTests {
 
-	@LocalServerPort
-	private int port;
+	@Autowired
+	private TestRestTemplate restTemplate;
 
 	@Test
 	public void testHome() throws Exception {
-		ResponseEntity<String> entity = new TestRestTemplate()
-				.getForEntity("http://localhost:" + this.port, String.class);
+		ResponseEntity<String> entity = this.restTemplate.getForEntity("/", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(entity.getBody()).isEqualTo("Hello World");
 	}
@@ -64,13 +63,10 @@ public class SampleJettyApplicationTests {
 	public void testCompression() throws Exception {
 		HttpHeaders requestHeaders = new HttpHeaders();
 		requestHeaders.set("Accept-Encoding", "gzip");
-		HttpEntity<?> requestEntity = new HttpEntity<Object>(requestHeaders);
+		HttpEntity<?> requestEntity = new HttpEntity<>(requestHeaders);
 
-		TestRestTemplate restTemplate = new TestRestTemplate();
-
-		ResponseEntity<byte[]> entity = restTemplate.exchange(
-				"http://localhost:" + this.port, HttpMethod.GET, requestEntity,
-				byte[].class);
+		ResponseEntity<byte[]> entity = this.restTemplate.exchange("/", HttpMethod.GET,
+				requestEntity, byte[].class);
 
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 

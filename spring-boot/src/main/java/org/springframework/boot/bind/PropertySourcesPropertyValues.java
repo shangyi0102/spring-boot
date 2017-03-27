@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,16 +52,31 @@ public class PropertySourcesPropertyValues implements PropertyValues {
 
 	private final PropertyNamePatternsMatcher includes;
 
-	private final Map<String, PropertyValue> propertyValues = new LinkedHashMap<String, PropertyValue>();
+	private final Map<String, PropertyValue> propertyValues = new LinkedHashMap<>();
 
-	private final ConcurrentHashMap<String, PropertySource<?>> collectionOwners = new ConcurrentHashMap<String, PropertySource<?>>();
+	private final ConcurrentHashMap<String, PropertySource<?>> collectionOwners = new ConcurrentHashMap<>();
+
+	private final boolean resolvePlaceholders;
 
 	/**
 	 * Create a new PropertyValues from the given PropertySources.
 	 * @param propertySources a PropertySources instance
 	 */
 	public PropertySourcesPropertyValues(PropertySources propertySources) {
-		this(propertySources, (Collection<String>) null, PropertyNamePatternsMatcher.ALL);
+		this(propertySources, true);
+	}
+
+	/**
+	 * Create a new PropertyValues from the given PropertySources that will optionally
+	 * resolve placeholders.
+	 * @param propertySources a PropertySources instance
+	 * @param resolvePlaceholders {@code true} if placeholders should be resolved.
+	 * @since 1.5.2
+	 */
+	public PropertySourcesPropertyValues(PropertySources propertySources,
+			boolean resolvePlaceholders) {
+		this(propertySources, (Collection<String>) null, PropertyNamePatternsMatcher.ALL,
+				resolvePlaceholders);
 	}
 
 	/**
@@ -76,7 +91,7 @@ public class PropertySourcesPropertyValues implements PropertyValues {
 			Collection<String> includePatterns,
 			Collection<String> nonEnumerableFallbackNames) {
 		this(propertySources, nonEnumerableFallbackNames,
-				new PatternPropertyNamePatternsMatcher(includePatterns));
+				new PatternPropertyNamePatternsMatcher(includePatterns), true);
 	}
 
 	/**
@@ -85,15 +100,17 @@ public class PropertySourcesPropertyValues implements PropertyValues {
 	 * @param nonEnumerableFallbackNames the property names to try in lieu of an
 	 * {@link EnumerablePropertySource}.
 	 * @param includes the property name patterns to include
+	 * @param resolvePlaceholders flag to indicate the placeholders should be resolved
 	 */
 	PropertySourcesPropertyValues(PropertySources propertySources,
 			Collection<String> nonEnumerableFallbackNames,
-			PropertyNamePatternsMatcher includes) {
+			PropertyNamePatternsMatcher includes, boolean resolvePlaceholders) {
 		Assert.notNull(propertySources, "PropertySources must not be null");
 		Assert.notNull(includes, "Includes must not be null");
 		this.propertySources = propertySources;
 		this.nonEnumerableFallbackNames = nonEnumerableFallbackNames;
 		this.includes = includes;
+		this.resolvePlaceholders = resolvePlaceholders;
 		PropertySourcesPropertyResolver resolver = new PropertySourcesPropertyResolver(
 				propertySources);
 		for (PropertySource<?> source : propertySources) {
@@ -138,12 +155,14 @@ public class PropertySourcesPropertyValues implements PropertyValues {
 	private Object getEnumerableProperty(EnumerablePropertySource<?> source,
 			PropertySourcesPropertyResolver resolver, String propertyName) {
 		try {
-			return resolver.getProperty(propertyName, Object.class);
+			if (this.resolvePlaceholders) {
+				return resolver.getProperty(propertyName, Object.class);
+			}
 		}
 		catch (RuntimeException ex) {
 			// Probably could not resolve placeholders, ignore it here
-			return source.getProperty(propertyName);
 		}
+		return source.getProperty(propertyName);
 	}
 
 	private void processNonEnumerablePropertySource(PropertySource<?> source,

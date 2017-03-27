@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ import org.springframework.util.Assert;
  * <pre class="code">
  * try {
  * 	// do some test to determine state of component
- * 	return new Health.Builder().up().withDetail(&quot;version&quot;, &quot;1.1.2&quot;).build();
+ * 	return new Health.Builder().up().withDetail("version", "1.1.2").build();
  * }
  * catch (Exception ex) {
  * 	return new Health.Builder().down(ex).build();
@@ -182,7 +182,7 @@ public final class Health {
 		 */
 		public Builder() {
 			this.status = Status.UNKNOWN;
-			this.details = new LinkedHashMap<String, Object>();
+			this.details = new LinkedHashMap<>();
 		}
 
 		/**
@@ -192,7 +192,7 @@ public final class Health {
 		public Builder(Status status) {
 			Assert.notNull(status, "Status must not be null");
 			this.status = status;
-			this.details = new LinkedHashMap<String, Object>();
+			this.details = new LinkedHashMap<>();
 		}
 
 		/**
@@ -205,7 +205,7 @@ public final class Health {
 			Assert.notNull(status, "Status must not be null");
 			Assert.notNull(details, "Details must not be null");
 			this.status = status;
-			this.details = new LinkedHashMap<String, Object>(details);
+			this.details = new LinkedHashMap<>(details);
 		}
 
 		/**
@@ -299,6 +299,7 @@ public final class Health {
 		public Health build() {
 			return new Health(this);
 		}
+
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,11 @@ package org.springframework.boot.test.web.client;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,6 +38,8 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.ssl.SSLContextBuilder;
 
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.boot.web.client.RootUriTemplateHandler;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -45,7 +49,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.http.client.InterceptingClientHttpRequestFactory;
 import org.springframework.http.client.support.BasicAuthorizationInterceptor;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
@@ -54,7 +57,7 @@ import org.springframework.web.client.RequestCallback;
 import org.springframework.web.client.ResponseExtractor;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.DefaultUriTemplateHandler;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 import org.springframework.web.util.UriTemplateHandler;
 
 /**
@@ -66,14 +69,33 @@ import org.springframework.web.util.UriTemplateHandler;
  * Note: To prevent injection problems this class internally does not extend
  * {@link RestTemplate}. If you need access to the underlying {@link RestTemplate} use
  * {@link #getRestTemplate()}.
+ * <p>
+ * If you are using the
+ * {@link org.springframework.boot.test.context.SpringBootTest @SpringBootTest}
+ * annotation, a {@link TestRestTemplate} is automatically available and can be
+ * {@code @Autowired} into you test. If you need customizations (for example to adding
+ * additional message converters) use a {@link RestTemplateBuilder} {@code @Bean}.
  *
  * @author Dave Syer
  * @author Phillip Webb
+ * @author Andy Wilkinson
  * @since 1.4.0
  */
 public class TestRestTemplate {
 
 	private final RestTemplate restTemplate;
+
+	private final HttpClientOption[] httpClientOptions;
+
+	/**
+	 * Create a new {@link TestRestTemplate} instance.
+	 * @param restTemplateBuilder builder used to configure underlying
+	 * {@link RestTemplate}
+	 * @since 1.4.1
+	 */
+	public TestRestTemplate(RestTemplateBuilder restTemplateBuilder) {
+		this(buildRestTemplate(restTemplateBuilder));
+	}
 
 	/**
 	 * Create a new {@link TestRestTemplate} instance.
@@ -101,6 +123,7 @@ public class TestRestTemplate {
 	public TestRestTemplate(RestTemplate restTemplate, String username, String password,
 			HttpClientOption... httpClientOptions) {
 		Assert.notNull(restTemplate, "RestTemplate must not be null");
+		this.httpClientOptions = httpClientOptions;
 		if (ClassUtils.isPresent("org.apache.http.client.config.RequestConfig", null)) {
 			restTemplate.setRequestFactory(
 					new CustomHttpComponentsClientHttpRequestFactory(httpClientOptions));
@@ -110,21 +133,35 @@ public class TestRestTemplate {
 		this.restTemplate = restTemplate;
 	}
 
+	private static RestTemplate buildRestTemplate(
+			RestTemplateBuilder restTemplateBuilder) {
+		Assert.notNull(restTemplateBuilder, "RestTemplateBuilder must not be null");
+		return restTemplateBuilder.build();
+	}
+
 	private void addAuthentication(RestTemplate restTemplate, String username,
 			String password) {
 		if (username == null) {
 			return;
 		}
-		List<ClientHttpRequestInterceptor> interceptors = Collections
-				.<ClientHttpRequestInterceptor>singletonList(
-						new BasicAuthorizationInterceptor(username, password));
-		restTemplate.setRequestFactory(new InterceptingClientHttpRequestFactory(
-				restTemplate.getRequestFactory(), interceptors));
+		List<ClientHttpRequestInterceptor> interceptors = restTemplate.getInterceptors();
+		if (interceptors == null) {
+			interceptors = Collections.emptyList();
+		}
+		interceptors = new ArrayList<>(interceptors);
+		Iterator<ClientHttpRequestInterceptor> iterator = interceptors.iterator();
+		while (iterator.hasNext()) {
+			if (iterator.next() instanceof BasicAuthorizationInterceptor) {
+				iterator.remove();
+			}
+		}
+		interceptors.add(new BasicAuthorizationInterceptor(username, password));
+		restTemplate.setInterceptors(interceptors);
 	}
 
 	/**
 	 * Configure the {@link UriTemplateHandler} to use to expand URI templates. By default
-	 * the {@link DefaultUriTemplateHandler} is used which relies on Spring's URI template
+	 * the {@link DefaultUriBuilderFactory} is used which relies on Spring's URI template
 	 * support and exposes several useful properties that customize its behavior for
 	 * encoding and for prepending a common base URL. An alternative implementation may be
 	 * used to plug an external URI template library.
@@ -144,7 +181,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand the template
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error on client-side HTTP error
 	 * @see RestTemplate#getForObject(String, Class, Object...)
 	 */
 	public <T> T getForObject(String url, Class<T> responseType, Object... urlVariables)
@@ -162,7 +199,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the map containing variables for the URI template
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#getForObject(String, Class, Object...)
 	 */
 	public <T> T getForObject(String url, Class<T> responseType,
@@ -177,11 +214,11 @@ public class TestRestTemplate {
 	 * @param responseType the type of the return value
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#getForObject(java.net.URI, java.lang.Class)
 	 */
 	public <T> T getForObject(URI url, Class<T> responseType) throws RestClientException {
-		return this.restTemplate.getForObject(url, responseType);
+		return this.restTemplate.getForObject(applyRootUriIfNecessary(url), responseType);
 	}
 
 	/**
@@ -194,7 +231,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand the template
 	 * @param <T> the type of the return value
 	 * @return the entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#getForEntity(java.lang.String, java.lang.Class,
 	 * java.lang.Object[])
 	 */
@@ -213,7 +250,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the map containing variables for the URI template
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#getForEntity(java.lang.String, java.lang.Class, java.util.Map)
 	 */
 	public <T> ResponseEntity<T> getForEntity(String url, Class<T> responseType,
@@ -228,12 +265,12 @@ public class TestRestTemplate {
 	 * @param responseType the type of the return value
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#getForEntity(java.net.URI, java.lang.Class)
 	 */
 	public <T> ResponseEntity<T> getForEntity(URI url, Class<T> responseType)
 			throws RestClientException {
-		return this.restTemplate.getForEntity(url, responseType);
+		return this.restTemplate.getForEntity(applyRootUriIfNecessary(url), responseType);
 	}
 
 	/**
@@ -243,7 +280,7 @@ public class TestRestTemplate {
 	 * @param url the URL
 	 * @param urlVariables the variables to expand the template
 	 * @return all HTTP headers of that resource
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#headForHeaders(java.lang.String, java.lang.Object[])
 	 */
 	public HttpHeaders headForHeaders(String url, Object... urlVariables)
@@ -258,7 +295,7 @@ public class TestRestTemplate {
 	 * @param url the URL
 	 * @param urlVariables the map containing variables for the URI template
 	 * @return all HTTP headers of that resource
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#headForHeaders(java.lang.String, java.util.Map)
 	 */
 	public HttpHeaders headForHeaders(String url, Map<String, ?> urlVariables)
@@ -270,11 +307,11 @@ public class TestRestTemplate {
 	 * Retrieve all headers of the resource specified by the URL.
 	 * @param url the URL
 	 * @return all HTTP headers of that resource
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#headForHeaders(java.net.URI)
 	 */
 	public HttpHeaders headForHeaders(URI url) throws RestClientException {
-		return this.restTemplate.headForHeaders(url);
+		return this.restTemplate.headForHeaders(applyRootUriIfNecessary(url));
 	}
 
 	/**
@@ -290,7 +327,7 @@ public class TestRestTemplate {
 	 * @param request the Object to be POSTed, may be {@code null}
 	 * @param urlVariables the variables to expand the template
 	 * @return the value for the {@code Location} header
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForLocation(java.lang.String, java.lang.Object,
 	 * java.lang.Object[])
@@ -313,7 +350,7 @@ public class TestRestTemplate {
 	 * @param request the Object to be POSTed, may be {@code null}
 	 * @param urlVariables the variables to expand the template
 	 * @return the value for the {@code Location} header
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForLocation(java.lang.String, java.lang.Object,
 	 * java.util.Map)
@@ -333,12 +370,12 @@ public class TestRestTemplate {
 	 * @param url the URL
 	 * @param request the Object to be POSTed, may be {@code null}
 	 * @return the value for the {@code Location} header
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForLocation(java.net.URI, java.lang.Object)
 	 */
 	public URI postForLocation(URI url, Object request) throws RestClientException {
-		return this.restTemplate.postForLocation(url, request);
+		return this.restTemplate.postForLocation(applyRootUriIfNecessary(url), request);
 	}
 
 	/**
@@ -355,7 +392,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand the template
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForObject(java.lang.String, java.lang.Object,
 	 * java.lang.Class, java.lang.Object[])
@@ -379,7 +416,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand the template
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForObject(java.lang.String, java.lang.Object,
 	 * java.lang.Class, java.util.Map)
@@ -400,13 +437,14 @@ public class TestRestTemplate {
 	 * @param responseType the type of the return value
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForObject(java.net.URI, java.lang.Object, java.lang.Class)
 	 */
 	public <T> T postForObject(URI url, Object request, Class<T> responseType)
 			throws RestClientException {
-		return this.restTemplate.postForObject(url, request, responseType);
+		return this.restTemplate.postForObject(applyRootUriIfNecessary(url), request,
+				responseType);
 	}
 
 	/**
@@ -423,7 +461,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand the template
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForEntity(java.lang.String, java.lang.Object,
 	 * java.lang.Class, java.lang.Object[])
@@ -447,7 +485,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand the template
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForEntity(java.lang.String, java.lang.Object,
 	 * java.lang.Class, java.util.Map)
@@ -469,13 +507,14 @@ public class TestRestTemplate {
 	 * @param responseType the response type to return
 	 * @param <T> the type of the return value
 	 * @return the converted object
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#postForEntity(java.net.URI, java.lang.Object, java.lang.Class)
 	 */
 	public <T> ResponseEntity<T> postForEntity(URI url, Object request,
 			Class<T> responseType) throws RestClientException {
-		return this.restTemplate.postForEntity(url, request, responseType);
+		return this.restTemplate.postForEntity(applyRootUriIfNecessary(url), request,
+				responseType);
 	}
 
 	/**
@@ -488,7 +527,7 @@ public class TestRestTemplate {
 	 * @param url the URL
 	 * @param request the Object to be PUT, may be {@code null}
 	 * @param urlVariables the variables to expand the template
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#put(java.lang.String, java.lang.Object, java.lang.Object[])
 	 */
@@ -507,7 +546,7 @@ public class TestRestTemplate {
 	 * @param url the URL
 	 * @param request the Object to be PUT, may be {@code null}
 	 * @param urlVariables the variables to expand the template
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#put(java.lang.String, java.lang.Object, java.util.Map)
 	 */
@@ -523,12 +562,80 @@ public class TestRestTemplate {
 	 * additional HTTP headers to the request.
 	 * @param url the URL
 	 * @param request the Object to be PUT, may be {@code null}
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see HttpEntity
 	 * @see RestTemplate#put(java.net.URI, java.lang.Object)
 	 */
 	public void put(URI url, Object request) throws RestClientException {
-		this.restTemplate.put(url, request);
+		this.restTemplate.put(applyRootUriIfNecessary(url), request);
+	}
+
+	/**
+	 * Update a resource by PATCHing the given object to the URI template, and returns the
+	 * representation found in the response.
+	 * <p>
+	 * URI Template variables are expanded using the given URI variables, if any.
+	 * <p>
+	 * The {@code request} parameter can be a {@link HttpEntity} in order to add
+	 * additional HTTP headers to the request.
+	 * @param url the URL
+	 * @param request the Object to be PATCHed, may be {@code null}
+	 * @param responseType the type of the return value
+	 * @param uriVariables the variables to expand the template
+	 * @param <T> the type of the return value
+	 * @return the converted object
+	 * @throws RestClientException on client-side HTTP error
+	 * @since 1.4.4
+	 * @see HttpEntity
+	 */
+	public <T> T patchForObject(String url, Object request, Class<T> responseType,
+			Object... uriVariables) throws RestClientException {
+		return this.restTemplate.patchForObject(url, request, responseType, uriVariables);
+	}
+
+	/**
+	 * Update a resource by PATCHing the given object to the URI template, and returns the
+	 * representation found in the response.
+	 * <p>
+	 * URI Template variables are expanded using the given map.
+	 * <p>
+	 * The {@code request} parameter can be a {@link HttpEntity} in order to add
+	 * additional HTTP headers to the request.
+	 * @param url the URL
+	 * @param request the Object to be PATCHed, may be {@code null}
+	 * @param responseType the type of the return value
+	 * @param uriVariables the variables to expand the template
+	 * @param <T> the type of the return value
+	 * @return the converted object
+	 * @throws RestClientException on client-side HTTP error
+	 * @since 1.4.4
+	 * @see HttpEntity
+	 */
+	public <T> T patchForObject(String url, Object request, Class<T> responseType,
+			Map<String, ?> uriVariables) throws RestClientException {
+		return this.restTemplate.patchForObject(url, request, responseType, uriVariables);
+	}
+
+	/**
+	 * Update a resource by PATCHing the given object to the URL, and returns the
+	 * representation found in the response.
+	 * <p>
+	 * The {@code request} parameter can be a {@link HttpEntity} in order to add
+	 * additional HTTP headers to the request.
+	 * @param url the URL
+	 * @param request the Object to be POSTed, may be {@code null}
+	 * @param responseType the type of the return value
+	 * @param <T> the type of the return value
+	 * @return the converted object
+	 * @throws RestClientException on client-side HTTP error
+	 * @since 1.4.4
+	 * @see HttpEntity
+	 */
+	public <T> T patchForObject(URI url, Object request, Class<T> responseType)
+			throws RestClientException {
+		return this.restTemplate.patchForObject(applyRootUriIfNecessary(url), request,
+				responseType);
+
 	}
 
 	/**
@@ -537,7 +644,7 @@ public class TestRestTemplate {
 	 * URI Template variables are expanded using the given URI variables, if any.
 	 * @param url the URL
 	 * @param urlVariables the variables to expand in the template
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#delete(java.lang.String, java.lang.Object[])
 	 */
 	public void delete(String url, Object... urlVariables) throws RestClientException {
@@ -550,7 +657,7 @@ public class TestRestTemplate {
 	 * URI Template variables are expanded using the given map.
 	 * @param url the URL
 	 * @param urlVariables the variables to expand the template
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#delete(java.lang.String, java.util.Map)
 	 */
 	public void delete(String url, Map<String, ?> urlVariables)
@@ -561,11 +668,11 @@ public class TestRestTemplate {
 	/**
 	 * Delete the resources at the specified URL.
 	 * @param url the URL
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#delete(java.net.URI)
 	 */
 	public void delete(URI url) throws RestClientException {
-		this.restTemplate.delete(url);
+		this.restTemplate.delete(applyRootUriIfNecessary(url));
 	}
 
 	/**
@@ -575,7 +682,7 @@ public class TestRestTemplate {
 	 * @param url the URL
 	 * @param urlVariables the variables to expand in the template
 	 * @return the value of the allow header
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#optionsForAllow(java.lang.String, java.lang.Object[])
 	 */
 	public Set<HttpMethod> optionsForAllow(String url, Object... urlVariables)
@@ -590,7 +697,7 @@ public class TestRestTemplate {
 	 * @param url the URL
 	 * @param urlVariables the variables to expand in the template
 	 * @return the value of the allow header
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#optionsForAllow(java.lang.String, java.util.Map)
 	 */
 	public Set<HttpMethod> optionsForAllow(String url, Map<String, ?> urlVariables)
@@ -602,11 +709,11 @@ public class TestRestTemplate {
 	 * Return the value of the Allow header for the given URL.
 	 * @param url the URL
 	 * @return the value of the allow header
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#optionsForAllow(java.net.URI)
 	 */
 	public Set<HttpMethod> optionsForAllow(URI url) throws RestClientException {
-		return this.restTemplate.optionsForAllow(url);
+		return this.restTemplate.optionsForAllow(applyRootUriIfNecessary(url));
 	}
 
 	/**
@@ -622,7 +729,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand in the template
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(java.lang.String, org.springframework.http.HttpMethod,
 	 * org.springframework.http.HttpEntity, java.lang.Class, java.lang.Object[])
 	 */
@@ -646,7 +753,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand in the template
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(java.lang.String, org.springframework.http.HttpMethod,
 	 * org.springframework.http.HttpEntity, java.lang.Class, java.util.Map)
 	 */
@@ -667,14 +774,15 @@ public class TestRestTemplate {
 	 * @param responseType the type of the return value
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(java.net.URI, org.springframework.http.HttpMethod,
 	 * org.springframework.http.HttpEntity, java.lang.Class)
 	 */
 	public <T> ResponseEntity<T> exchange(URI url, HttpMethod method,
 			HttpEntity<?> requestEntity, Class<T> responseType)
 					throws RestClientException {
-		return this.restTemplate.exchange(url, method, requestEntity, responseType);
+		return this.restTemplate.exchange(applyRootUriIfNecessary(url), method,
+				requestEntity, responseType);
 	}
 
 	/**
@@ -693,7 +801,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand in the template
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(java.lang.String, org.springframework.http.HttpMethod,
 	 * org.springframework.http.HttpEntity,
 	 * org.springframework.core.ParameterizedTypeReference, java.lang.Object[])
@@ -721,7 +829,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand in the template
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(java.lang.String, org.springframework.http.HttpMethod,
 	 * org.springframework.http.HttpEntity,
 	 * org.springframework.core.ParameterizedTypeReference, java.util.Map)
@@ -748,7 +856,7 @@ public class TestRestTemplate {
 	 * @param responseType the type of the return value
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(java.net.URI, org.springframework.http.HttpMethod,
 	 * org.springframework.http.HttpEntity,
 	 * org.springframework.core.ParameterizedTypeReference)
@@ -756,7 +864,8 @@ public class TestRestTemplate {
 	public <T> ResponseEntity<T> exchange(URI url, HttpMethod method,
 			HttpEntity<?> requestEntity, ParameterizedTypeReference<T> responseType)
 					throws RestClientException {
-		return this.restTemplate.exchange(url, method, requestEntity, responseType);
+		return this.restTemplate.exchange(applyRootUriIfNecessary(url), method,
+				requestEntity, responseType);
 	}
 
 	/**
@@ -771,12 +880,13 @@ public class TestRestTemplate {
 	 * @param responseType the type of the return value
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(org.springframework.http.RequestEntity, java.lang.Class)
 	 */
 	public <T> ResponseEntity<T> exchange(RequestEntity<?> requestEntity,
 			Class<T> responseType) throws RestClientException {
-		return this.restTemplate.exchange(requestEntity, responseType);
+		return this.restTemplate.exchange(
+				createRequestEntityWithRootAppliedUri(requestEntity), responseType);
 	}
 
 	/**
@@ -792,13 +902,14 @@ public class TestRestTemplate {
 	 * @param responseType the type of the return value
 	 * @param <T> the type of the return value
 	 * @return the response as entity
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#exchange(org.springframework.http.RequestEntity,
 	 * org.springframework.core.ParameterizedTypeReference)
 	 */
 	public <T> ResponseEntity<T> exchange(RequestEntity<?> requestEntity,
 			ParameterizedTypeReference<T> responseType) throws RestClientException {
-		return this.restTemplate.exchange(requestEntity, responseType);
+		return this.restTemplate.exchange(
+				createRequestEntityWithRootAppliedUri(requestEntity), responseType);
 	}
 
 	/**
@@ -813,7 +924,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand in the template
 	 * @param <T> the type of the return value
 	 * @return an arbitrary object, as returned by the {@link ResponseExtractor}
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#execute(java.lang.String, org.springframework.http.HttpMethod,
 	 * org.springframework.web.client.RequestCallback,
 	 * org.springframework.web.client.ResponseExtractor, java.lang.Object[])
@@ -837,7 +948,7 @@ public class TestRestTemplate {
 	 * @param urlVariables the variables to expand in the template
 	 * @param <T> the type of the return value
 	 * @return an arbitrary object, as returned by the {@link ResponseExtractor}
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#execute(java.lang.String, org.springframework.http.HttpMethod,
 	 * org.springframework.web.client.RequestCallback,
 	 * org.springframework.web.client.ResponseExtractor, java.util.Map)
@@ -858,14 +969,15 @@ public class TestRestTemplate {
 	 * @param responseExtractor object that extracts the return value from the response
 	 * @param <T> the type of the return value
 	 * @return an arbitrary object, as returned by the {@link ResponseExtractor}
-	 * @throws RestClientException on-client side HTTP error
+	 * @throws RestClientException on client-side HTTP error
 	 * @see RestTemplate#execute(java.net.URI, org.springframework.http.HttpMethod,
 	 * org.springframework.web.client.RequestCallback,
 	 * org.springframework.web.client.ResponseExtractor)
 	 */
 	public <T> T execute(URI url, HttpMethod method, RequestCallback requestCallback,
 			ResponseExtractor<T> responseExtractor) throws RestClientException {
-		return this.restTemplate.execute(url, method, requestCallback, responseExtractor);
+		return this.restTemplate.execute(applyRootUriIfNecessary(url), method,
+				requestCallback, responseExtractor);
 	}
 
 	/**
@@ -875,6 +987,46 @@ public class TestRestTemplate {
 	 */
 	public RestTemplate getRestTemplate() {
 		return this.restTemplate;
+	}
+
+	/**
+	 * Creates a new {@code TestRestTemplate} with the same configuration as this one,
+	 * except that it will send basic authorization headers using the given
+	 * {@code username} and {@code password}.
+	 * @param username the username
+	 * @param password the password
+	 * @return the new template
+	 * @since 1.4.1
+	 */
+	public TestRestTemplate withBasicAuth(String username, String password) {
+		RestTemplate restTemplate = new RestTemplate();
+		restTemplate.setMessageConverters(getRestTemplate().getMessageConverters());
+		restTemplate.setInterceptors(getRestTemplate().getInterceptors());
+		restTemplate.setRequestFactory(getRestTemplate().getRequestFactory());
+		restTemplate.setUriTemplateHandler(getRestTemplate().getUriTemplateHandler());
+		TestRestTemplate testRestTemplate = new TestRestTemplate(restTemplate, username,
+				password, this.httpClientOptions);
+		testRestTemplate.getRestTemplate()
+				.setErrorHandler(getRestTemplate().getErrorHandler());
+		return testRestTemplate;
+	}
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	private RequestEntity<?> createRequestEntityWithRootAppliedUri(
+			RequestEntity<?> requestEntity) {
+		return new RequestEntity(requestEntity.getBody(), requestEntity.getHeaders(),
+				requestEntity.getMethod(),
+				applyRootUriIfNecessary(requestEntity.getUrl()), requestEntity.getType());
+	}
+
+	private URI applyRootUriIfNecessary(URI uri) {
+		UriTemplateHandler uriTemplateHandler = this.restTemplate.getUriTemplateHandler();
+		if ((uriTemplateHandler instanceof RootUriTemplateHandler)
+				&& uri.toString().startsWith("/")) {
+			return URI.create(((RootUriTemplateHandler) uriTemplateHandler).getRootUri()
+					+ uri.toString());
+		}
+		return uri;
 	}
 
 	/**
@@ -911,7 +1063,7 @@ public class TestRestTemplate {
 
 		public CustomHttpComponentsClientHttpRequestFactory(
 				HttpClientOption[] httpClientOptions) {
-			Set<HttpClientOption> options = new HashSet<TestRestTemplate.HttpClientOption>(
+			Set<HttpClientOption> options = new HashSet<>(
 					Arrays.asList(httpClientOptions));
 			this.cookieSpec = (options.contains(HttpClientOption.ENABLE_COOKIES)
 					? CookieSpecs.STANDARD : CookieSpecs.IGNORE_COOKIES);

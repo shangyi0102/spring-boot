@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016 the original author or authors.
+ * Copyright 2012-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,13 +20,18 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.Charset;
 import java.util.zip.GZIPInputStream;
 
+import org.apache.coyote.AbstractProtocol;
+import org.apache.coyote.ProtocolHandler;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.springframework.boot.context.embedded.LocalServerPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.web.embedded.tomcat.TomcatWebServer;
+import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
+import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -49,13 +54,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DirtiesContext
 public class SampleTomcatApplicationTests {
 
-	@LocalServerPort
-	private int port;
+	@Autowired
+	private TestRestTemplate restTemplate;
+
+	@Autowired
+	private ApplicationContext applicationContext;
 
 	@Test
 	public void testHome() throws Exception {
-		ResponseEntity<String> entity = new TestRestTemplate()
-				.getForEntity("http://localhost:" + this.port, String.class);
+		ResponseEntity<String> entity = this.restTemplate.getForEntity("/", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(entity.getBody()).isEqualTo("Hello World");
 	}
@@ -64,11 +71,9 @@ public class SampleTomcatApplicationTests {
 	public void testCompression() throws Exception {
 		HttpHeaders requestHeaders = new HttpHeaders();
 		requestHeaders.set("Accept-Encoding", "gzip");
-		HttpEntity<?> requestEntity = new HttpEntity<Object>(requestHeaders);
-		TestRestTemplate restTemplate = new TestRestTemplate();
-		ResponseEntity<byte[]> entity = restTemplate.exchange(
-				"http://localhost:" + this.port, HttpMethod.GET, requestEntity,
-				byte[].class);
+		HttpEntity<?> requestEntity = new HttpEntity<>(requestHeaders);
+		ResponseEntity<byte[]> entity = this.restTemplate.exchange("/", HttpMethod.GET,
+				requestEntity, byte[].class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 		GZIPInputStream inflater = new GZIPInputStream(
 				new ByteArrayInputStream(entity.getBody()));
@@ -79,6 +84,17 @@ public class SampleTomcatApplicationTests {
 		finally {
 			inflater.close();
 		}
+	}
+
+	@Test
+	public void testTimeout() throws Exception {
+		ServletWebServerApplicationContext context = (ServletWebServerApplicationContext) this.applicationContext;
+		TomcatWebServer embeddedServletContainer = (TomcatWebServer) context
+				.getWebServer();
+		ProtocolHandler protocolHandler = embeddedServletContainer.getTomcat()
+				.getConnector().getProtocolHandler();
+		int timeout = ((AbstractProtocol<?>) protocolHandler).getConnectionTimeout();
+		assertThat(timeout).isEqualTo(5000);
 	}
 
 }
