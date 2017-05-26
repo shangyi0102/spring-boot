@@ -2359,6 +2359,9 @@ DataSource configuration is controlled by external configuration properties in
 	spring.datasource.driver-class-name=com.mysql.jdbc.Driver
 ----
 
+NOTE: You should at least specify the url using the `spring.datasource.url` property or
+Spring Boot will attempt to auto-configure an embedded database.
+
 TIP: You often won't need to specify the `driver-class-name` since Spring boot can deduce
 it for most databases from the `url`.
 
@@ -3336,7 +3339,10 @@ size of 500 and a _time to live_ of 10 minutes
 ----
 
 Besides, if a `com.google.common.cache.CacheLoader` bean is defined, it is automatically
-associated to the `GuavaCacheManager`.
+associated to the `GuavaCacheManager`. Since the `CacheLoader` is going to be associated
+to _all_ caches managed by the cache manager, it must be defined as
+`CacheLoader<Object, Object>`. Any other generic type will be ignored by the
+auto-configuration.
 
 
 
