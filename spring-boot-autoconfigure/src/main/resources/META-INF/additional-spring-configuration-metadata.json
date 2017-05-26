@@ -43,7 +43,7 @@
     "name": "spring.aop.proxy-target-class",
     "type": "java.lang.Boolean",
     "description": "Whether subclass-based (CGLIB) proxies are to be created (true) as opposed to standard Java interface-based proxies (false).",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "name": "spring.application.admin.enabled",
@@ -83,6 +83,12 @@
   {
     "name": "spring.data.cassandra.compression",
     "defaultValue": "none"
+  },
+  {
+    "name": "spring.data.cassandra.reactive-repositories.enabled",
+    "type": "java.lang.Boolean",
+    "description": "Enable Cassandra reactive repositories.",
+    "defaultValue": true
   },
   {
     "name": "spring.data.couchbase.consistency",
@@ -318,6 +324,10 @@
     "name": "spring.jta.bitronix.properties.warn-about-zero-resource-transaction",
     "description": "Log a warning for transactions executed without a single enlisted resource.",
     "defaultValue": true
+  },
+  {
+    "name": "spring.kafka.jaas.control-flag",
+    "defaultValue": "required"
   },
   {
     "name": "spring.mobile.devicedelegatingviewresolver.enabled",

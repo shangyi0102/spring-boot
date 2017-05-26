@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -44,8 +45,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.autoconfigure.http.HttpMessageConverters;
-import org.springframework.boot.autoconfigure.validation.SpringValidator;
 import org.springframework.boot.autoconfigure.validation.ValidationAutoConfiguration;
+import org.springframework.boot.autoconfigure.validation.ValidatorAdapter;
 import org.springframework.boot.autoconfigure.web.ConditionalOnEnabledResourceChain;
 import org.springframework.boot.autoconfigure.web.ResourceProperties;
 import org.springframework.boot.autoconfigure.web.ResourceProperties.Strategy;
@@ -72,8 +73,13 @@ import org.springframework.util.StringUtils;
 import org.springframework.validation.DefaultMessageCodesResolver;
 import org.springframework.validation.MessageCodesResolver;
 import org.springframework.validation.Validator;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.accept.ContentNegotiationManager;
+import org.springframework.web.accept.ContentNegotiationStrategy;
+import org.springframework.web.accept.PathExtensionContentNegotiationStrategy;
 import org.springframework.web.bind.support.ConfigurableWebBindingInitializer;
+import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextListener;
 import org.springframework.web.filter.HiddenHttpMethodFilter;
 import org.springframework.web.filter.HttpPutFormContentFilter;
@@ -91,7 +97,7 @@ import org.springframework.web.servlet.config.annotation.ResourceChainRegistrati
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurationSupport;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.handler.AbstractHandlerExceptionResolver;
 import org.springframework.web.servlet.handler.AbstractUrlHandlerMapping;
 import org.springframework.web.servlet.handler.SimpleUrlHandlerMapping;
@@ -122,17 +128,16 @@ import org.springframework.web.servlet.view.InternalResourceViewResolver;
  */
 @Configuration
 @ConditionalOnWebApplication(type = Type.SERVLET)
-@ConditionalOnClass({ Servlet.class, DispatcherServlet.class,
-		WebMvcConfigurerAdapter.class })
+@ConditionalOnClass({ Servlet.class, DispatcherServlet.class, WebMvcConfigurer.class })
 @ConditionalOnMissingBean(WebMvcConfigurationSupport.class)
 @AutoConfigureOrder(Ordered.HIGHEST_PRECEDENCE + 10)
 @AutoConfigureAfter({ DispatcherServletAutoConfiguration.class,
 		ValidationAutoConfiguration.class })
 public class WebMvcAutoConfiguration {
 
-	public static String DEFAULT_PREFIX = "";
+	public static final String DEFAULT_PREFIX = "";
 
-	public static String DEFAULT_SUFFIX = "";
+	public static final String DEFAULT_SUFFIX = "";
 
 	@Bean
 	@ConditionalOnMissingBean(HiddenHttpMethodFilter.class)
@@ -147,15 +152,14 @@ public class WebMvcAutoConfiguration {
 		return new OrderedHttpPutFormContentFilter();
 	}
 
-	// Defined as a nested config to ensure WebMvcConfigurerAdapter is not read when not
+	// Defined as a nested config to ensure WebMvcConfigurer is not read when not
 	// on the classpath
 	@Configuration
 	@Import(EnableWebMvcConfiguration.class)
 	@EnableConfigurationProperties({ WebMvcProperties.class, ResourceProperties.class })
-	public static class WebMvcAutoConfigurationAdapter extends WebMvcConfigurerAdapter {
+	public static class WebMvcAutoConfigurationAdapter implements WebMvcConfigurer {
 
-		private static final Log logger = LogFactory
-				.getLog(WebMvcConfigurerAdapter.class);
+		private static final Log logger = LogFactory.getLog(WebMvcConfigurer.class);
 
 		private final ResourceProperties resourceProperties;
 
@@ -305,7 +309,8 @@ public class WebMvcAutoConfiguration {
 		@Bean
 		public WelcomePageHandlerMapping welcomePageHandlerMapping(
 				ResourceProperties resourceProperties) {
-			return new WelcomePageHandlerMapping(resourceProperties.getWelcomePage());
+			return new WelcomePageHandlerMapping(resourceProperties.getWelcomePage(),
+					this.mvcProperties.getStaticPathPattern());
 		}
 
 		private void customizeResourceHandlerRegistration(
@@ -346,7 +351,7 @@ public class WebMvcAutoConfiguration {
 			public ResourceHttpRequestHandler faviconRequestHandler() {
 				ResourceHttpRequestHandler requestHandler = new ResourceHttpRequestHandler();
 				requestHandler
-						.setLocations(this.resourceProperties.getFaviconLocations());
+						.setLocations(this.resourceProperties.resolveFaviconLocations());
 				return requestHandler;
 			}
 
@@ -408,7 +413,7 @@ public class WebMvcAutoConfiguration {
 					getClass().getClassLoader())) {
 				return super.mvcValidator();
 			}
-			return SpringValidator.get(getApplicationContext(), getValidator());
+			return ValidatorAdapter.get(getApplicationContext(), getValidator());
 		}
 
 		@Override
@@ -454,6 +459,22 @@ public class WebMvcAutoConfiguration {
 					}
 				}
 			}
+		}
+
+		@Bean
+		@Override
+		public ContentNegotiationManager mvcContentNegotiationManager() {
+			ContentNegotiationManager manager = super.mvcContentNegotiationManager();
+			List<ContentNegotiationStrategy> strategies = manager.getStrategies();
+			ListIterator<ContentNegotiationStrategy> iterator = strategies.listIterator();
+			while (iterator.hasNext()) {
+				ContentNegotiationStrategy strategy = iterator.next();
+				if (strategy instanceof PathExtensionContentNegotiationStrategy) {
+					iterator.set(new OptionalPathExtensionContentNegotiationStrategy(
+							strategy));
+				}
+			}
+			return manager;
 		}
 
 	}
@@ -524,8 +545,9 @@ public class WebMvcAutoConfiguration {
 		private static final Log logger = LogFactory
 				.getLog(WelcomePageHandlerMapping.class);
 
-		private WelcomePageHandlerMapping(Resource welcomePage) {
-			if (welcomePage != null) {
+		private WelcomePageHandlerMapping(Resource welcomePage,
+				String staticPathPattern) {
+			if (welcomePage != null && "/**".equals(staticPathPattern)) {
 				logger.info("Adding welcome page: " + welcomePage);
 				ParameterizableViewController controller = new ParameterizableViewController();
 				controller.setViewName("forward:index.html");
@@ -548,6 +570,36 @@ public class WebMvcAutoConfiguration {
 			String acceptHeader = request.getHeader(HttpHeaders.ACCEPT);
 			return MediaType.parseMediaTypes(
 					StringUtils.hasText(acceptHeader) ? acceptHeader : "*/*");
+		}
+
+	}
+
+	/**
+	 * Decorator to make {@link PathExtensionContentNegotiationStrategy} optional
+	 * depending on a request attribute.
+	 */
+	static class OptionalPathExtensionContentNegotiationStrategy
+			implements ContentNegotiationStrategy {
+
+		private static final String SKIP_ATTRIBUTE = PathExtensionContentNegotiationStrategy.class
+				.getName() + ".SKIP";
+
+		private final ContentNegotiationStrategy delegate;
+
+		OptionalPathExtensionContentNegotiationStrategy(
+				ContentNegotiationStrategy delegate) {
+			this.delegate = delegate;
+		}
+
+		@Override
+		public List<MediaType> resolveMediaTypes(NativeWebRequest webRequest)
+				throws HttpMediaTypeNotAcceptableException {
+			Object skip = webRequest.getAttribute(SKIP_ATTRIBUTE,
+					RequestAttributes.SCOPE_REQUEST);
+			if (skip != null && Boolean.parseBoolean(skip.toString())) {
+				return Collections.emptyList();
+			}
+			return this.delegate.resolveMediaTypes(webRequest);
 		}
 
 	}

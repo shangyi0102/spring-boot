@@ -27,7 +27,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnResource;
 import org.springframework.boot.validation.MessageInterpolatorFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Role;
+import org.springframework.core.env.Environment;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
 
@@ -36,17 +38,19 @@ import org.springframework.validation.beanvalidation.MethodValidationPostProcess
  * infrastructure.
  *
  * @author Stephane Nicoll
+ * @author Madhura Bhave
  * @since 1.5.0
  */
 @Configuration
 @ConditionalOnClass(ExecutableValidator.class)
 @ConditionalOnResource(resources = "classpath:META-INF/services/javax.validation.spi.ValidationProvider")
+@Import(PrimaryDefaultValidatorPostProcessor.class)
 public class ValidationAutoConfiguration {
 
 	@Bean
 	@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-	@ConditionalOnMissingBean
-	public static Validator jsr303Validator() {
+	@ConditionalOnMissingBean(Validator.class)
+	public static LocalValidatorFactoryBean defaultValidator() {
 		LocalValidatorFactoryBean factoryBean = new LocalValidatorFactoryBean();
 		MessageInterpolatorFactory interpolatorFactory = new MessageInterpolatorFactory();
 		factoryBean.setMessageInterpolator(interpolatorFactory.getObject());
@@ -56,9 +60,11 @@ public class ValidationAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	public static MethodValidationPostProcessor methodValidationPostProcessor(
-			Validator validator) {
+			Environment environment, Validator validator) {
 		MethodValidationPostProcessor processor = new MethodValidationPostProcessor();
-		processor.setProxyTargetClass(true);
+		boolean proxyTargetClass = environment
+				.getProperty("spring.aop.proxy-target-class", Boolean.class, true);
+		processor.setProxyTargetClass(proxyTargetClass);
 		processor.setValidator(validator);
 		return processor;
 	}

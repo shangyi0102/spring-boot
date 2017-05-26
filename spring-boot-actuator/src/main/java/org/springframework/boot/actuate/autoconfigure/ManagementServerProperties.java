@@ -79,7 +79,7 @@ public class ManagementServerProperties implements SecurityPrerequisite {
 	/**
 	 * Management endpoint context-path.
 	 */
-	private String contextPath = "";
+	private String contextPath = "/application";
 
 	/**
 	 * Add the "X-Application-Context" HTTP header in each response.
@@ -169,7 +169,8 @@ public class ManagementServerProperties implements SecurityPrerequisite {
 		/**
 		 * Comma-separated list of roles that can access the management endpoint.
 		 */
-		private List<String> roles = new ArrayList<String>(Collections.singletonList("ACTUATOR"));
+		private List<String> roles = new ArrayList<String>(
+				Collections.singletonList("ACTUATOR"));
 
 		/**
 		 * Session creating policy for security use (always, never, if_required,

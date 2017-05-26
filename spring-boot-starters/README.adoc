@@ -22,6 +22,9 @@ do as they were designed before this was clarified.
 |===
 | Name | Location
 
+| http://log4jdbc.brunorozendo.com/[Log4jdbc]
+| https://github.com/candrews/log4jdbc-spring-boot-starter
+
 | Central Authentication Service (CAS) client
 | https://github.com/Unicon/cas-client-autoconfig-support
 
@@ -117,5 +120,11 @@ do as they were designed before this was clarified.
 
 | http://square.github.io/okhttp/[OkHttp]
 | https://github.com/freefair/okhttp-spring-boot
+
+| https://github.com/membrane/service-proxy[Membrane Service Proxy]
+| https://github.com/membrane/membrane-spring-boot-starter
+
+| http://teiid.org/[Teiid]
+| https://github.com/teiid/teiid-spring-boot
 
 |===

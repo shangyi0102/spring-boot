@@ -13,15 +13,28 @@ org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration,\
 org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,\
 org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration
 
+# AutoConfigureDataLdap auto-configuration imports
+org.springframework.boot.test.autoconfigure.data.ldap.AutoConfigureDataLdap=\
+org.springframework.boot.autoconfigure.data.ldap.LdapDataAutoConfiguration,\
+org.springframework.boot.autoconfigure.data.ldap.LdapRepositoriesAutoConfiguration,\
+org.springframework.boot.autoconfigure.ldap.LdapAutoConfiguration,\
+org.springframework.boot.autoconfigure.ldap.embedded.EmbeddedLdapAutoConfiguration
+
 # AutoConfigureDataMongo auto-configuration imports
 org.springframework.boot.test.autoconfigure.data.mongo.AutoConfigureDataMongo=\
 org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration,\
+org.springframework.boot.autoconfigure.data.mongo.MongoReactiveDataAutoConfiguration,\
+org.springframework.boot.autoconfigure.data.mongo.MongoReactiveRepositoriesAutoConfiguration,\
 org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration,\
-org.springframework.boot.autoconfigure.data.mongo.ReactiveMongoDataAutoConfiguration,\
-org.springframework.boot.autoconfigure.data.mongo.ReactiveMongoRepositoriesAutoConfiguration,\
 org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration,\
-org.springframework.boot.autoconfigure.mongo.ReactiveMongoAutoConfiguration,\
+org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration,\
 org.springframework.boot.autoconfigure.mongo.embedded.EmbeddedMongoAutoConfiguration
+
+# AutoConfigureDataNeo4j auto-configuration imports
+org.springframework.boot.test.autoconfigure.data.neo4j.AutoConfigureDataNeo4j=\
+org.springframework.boot.autoconfigure.data.neo4j.Neo4jDataAutoConfiguration,\
+org.springframework.boot.autoconfigure.data.neo4j.Neo4jRepositoriesAutoConfiguration,\
+org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration
 
 # AutoConfigureJdbc auto-configuration imports
 org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureJdbc=\
@@ -54,7 +67,7 @@ org.springframework.boot.test.autoconfigure.web.reactive.WebTestClientAutoConfig
 org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebFlux=\
 org.springframework.boot.autoconfigure.context.MessageSourceAutoConfiguration,\
 org.springframework.boot.autoconfigure.validation.ValidationAutoConfiguration,\
-org.springframework.boot.autoconfigure.web.reactive.WebFluxAnnotationAutoConfiguration
+org.springframework.boot.autoconfigure.web.reactive.WebFluxAutoConfiguration
 
 # AutoConfigureMockMvc auto-configuration imports
 org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc=\

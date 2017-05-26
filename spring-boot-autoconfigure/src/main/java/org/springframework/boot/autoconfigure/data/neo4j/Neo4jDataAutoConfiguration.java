@@ -23,7 +23,6 @@ import org.neo4j.ogm.session.event.EventListener;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
-import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -31,7 +30,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.autoconfigure.domain.EntityScanPackages;
-import org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration;
 import org.springframework.boot.autoconfigure.transaction.TransactionManagerCustomizers;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
@@ -41,7 +39,7 @@ import org.springframework.data.neo4j.transaction.Neo4jTransactionManager;
 import org.springframework.data.neo4j.web.support.OpenSessionInViewInterceptor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * {@link EnableAutoConfiguration Auto-configuration} for Spring Data Neo4j.
@@ -54,7 +52,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter
  * @since 1.4.0
  */
 @Configuration
-@AutoConfigureAfter(TransactionAutoConfiguration.class)
 @ConditionalOnClass({ SessionFactory.class, PlatformTransactionManager.class })
 @ConditionalOnMissingBean(SessionFactory.class)
 @EnableConfigurationProperties(Neo4jProperties.class)
@@ -111,14 +108,13 @@ public class Neo4jDataAutoConfiguration {
 
 	@Configuration
 	@ConditionalOnWebApplication(type = Type.SERVLET)
-	@ConditionalOnClass({ WebMvcConfigurerAdapter.class,
-			OpenSessionInViewInterceptor.class })
+	@ConditionalOnClass({ WebMvcConfigurer.class, OpenSessionInViewInterceptor.class })
 	@ConditionalOnMissingBean(OpenSessionInViewInterceptor.class)
 	@ConditionalOnProperty(prefix = "spring.data.neo4j", name = "open-in-view", havingValue = "true", matchIfMissing = true)
 	protected static class Neo4jWebConfiguration {
 
 		@Configuration
-		protected static class Neo4jWebMvcConfiguration extends WebMvcConfigurerAdapter {
+		protected static class Neo4jWebMvcConfiguration implements WebMvcConfigurer {
 
 			@Bean
 			public OpenSessionInViewInterceptor neo4jOpenSessionInViewInterceptor() {

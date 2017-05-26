@@ -22,11 +22,12 @@ import java.net.URLClassLoader;
 import com.hazelcast.util.Base64;
 import org.junit.After;
 import org.junit.Test;
+import org.neo4j.ogm.config.AutoIndexMode;
 import org.neo4j.ogm.config.Configuration;
 import org.neo4j.ogm.config.Credentials;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.test.util.EnvironmentTestUtils;
+import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,6 +108,20 @@ public class Neo4jPropertiesTests {
 	}
 
 	@Test
+	public void autoIndexNoneByDefault() {
+		Neo4jProperties properties = load(true);
+		Configuration configuration = properties.createConfiguration();
+		assertThat(configuration.getAutoIndex()).isEqualTo(AutoIndexMode.NONE);
+	}
+
+	@Test
+	public void autoIndexCanBeConfigured() {
+		Neo4jProperties properties = load(true, "spring.data.neo4j.auto-index=validate");
+		Configuration configuration = properties.createConfiguration();
+		assertThat(configuration.getAutoIndex()).isEqualTo(AutoIndexMode.VALIDATE);
+	}
+
+	@Test
 	public void embeddedModeDisabledUseBoltUri() {
 		Neo4jProperties properties = load(true,
 				"spring.data.neo4j.embedded.enabled=false");
@@ -167,7 +182,7 @@ public class Neo4jPropertiesTests {
 			}
 
 		});
-		EnvironmentTestUtils.addEnvironment(ctx, environment);
+		TestPropertyValues.of(environment).applyTo(ctx);
 		ctx.register(TestConfiguration.class);
 		ctx.refresh();
 		this.context = ctx;

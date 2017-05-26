@@ -137,6 +137,8 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 
 	private boolean useForwardHeaders;
 
+	private boolean eagerInitFilters = true;
+
 	/**
 	 * Create a new {@link UndertowServletWebServerFactory} instance.
 	 */
@@ -315,18 +317,20 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 				keyPassword = ssl.getKeyStorePassword().toCharArray();
 			}
 			keyManagerFactory.init(keyStore, keyPassword);
-			return getConfigurableAliasKeyManagers(ssl, keyManagerFactory.getKeyManagers());
+			return getConfigurableAliasKeyManagers(ssl,
+					keyManagerFactory.getKeyManagers());
 		}
 		catch (Exception ex) {
 			throw new IllegalStateException(ex);
 		}
 	}
 
-	private KeyManager[] getConfigurableAliasKeyManagers(Ssl ssl, KeyManager[] keyManagers) {
+	private KeyManager[] getConfigurableAliasKeyManagers(Ssl ssl,
+			KeyManager[] keyManagers) {
 		for (int i = 0; i < keyManagers.length; i++) {
 			if (keyManagers[i] instanceof X509ExtendedKeyManager) {
-				keyManagers[i] = new ConfigurableAliasKeyManager((X509ExtendedKeyManager) keyManagers[i],
-						ssl.getKeyAlias());
+				keyManagers[i] = new ConfigurableAliasKeyManager(
+						(X509ExtendedKeyManager) keyManagers[i], ssl.getKeyAlias());
 			}
 		}
 		return keyManagers;
@@ -390,6 +394,7 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 		configureErrorPages(deployment);
 		deployment.setServletStackTraces(ServletStackTraces.NONE);
 		deployment.setResourceManager(getDocumentRootResourceManager());
+		deployment.setEagerFilterInit(this.eagerInitFilters);
 		configureMimeMappings(deployment);
 		for (UndertowDeploymentInfoCustomizer customizer : this.deploymentInfoCustomizers) {
 			customizer.customize(deployment);
@@ -578,11 +583,6 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 		this.bufferSize = bufferSize;
 	}
 
-	@Deprecated
-	public void setBuffersPerRegion(Integer buffersPerRegion) {
-
-	}
-
 	public void setIoThreads(Integer ioThreads) {
 		this.ioThreads = ioThreads;
 	}
@@ -638,6 +638,25 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 	 */
 	public void setUseForwardHeaders(boolean useForwardHeaders) {
 		this.useForwardHeaders = useForwardHeaders;
+	}
+
+	/**
+	 * Return if filters should be initialized eagerly.
+	 * @return {@code true} if filters are initialized eagerly, otherwise {@code false}.
+	 * @since 2.0.0
+	 */
+	public boolean isEagerInitFilters() {
+		return this.eagerInitFilters;
+	}
+
+	/**
+	 * Set whether filters should be initialized eagerly.
+	 * @param eagerInitFilters {@code true} if filters are initialized eagerly, otherwise
+	 * {@code false}.
+	 * @since 2.0.0
+	 */
+	public void setEagerInitFilters(boolean eagerInitFilters) {
+		this.eagerInitFilters = eagerInitFilters;
 	}
 
 	/**
@@ -709,54 +728,66 @@ public class UndertowServletWebServerFactory extends AbstractServletWebServerFac
 		}
 	}
 
+	/**
+	 * {@link X509ExtendedKeyManager} that supports custom alias configuration.
+	 */
 	private static class ConfigurableAliasKeyManager extends X509ExtendedKeyManager {
 
-		private final X509ExtendedKeyManager sourceKeyManager;
+		private final X509ExtendedKeyManager keyManager;
 
 		private final String alias;
 
 		ConfigurableAliasKeyManager(X509ExtendedKeyManager keyManager, String alias) {
-			this.sourceKeyManager = keyManager;
+			this.keyManager = keyManager;
 			this.alias = alias;
 		}
 
 		@Override
-		public String chooseEngineClientAlias(String[] strings, Principal[] principals, SSLEngine sslEngine) {
-			return this.sourceKeyManager.chooseEngineClientAlias(strings, principals, sslEngine);
+		public String chooseEngineClientAlias(String[] strings, Principal[] principals,
+				SSLEngine sslEngine) {
+			return this.keyManager.chooseEngineClientAlias(strings, principals,
+					sslEngine);
 		}
 
 		@Override
-		public String chooseEngineServerAlias(String s, Principal[] principals, SSLEngine sslEngine) {
+		public String chooseEngineServerAlias(String s, Principal[] principals,
+				SSLEngine sslEngine) {
 			if (this.alias == null) {
-				return this.sourceKeyManager.chooseEngineServerAlias(s, principals, sslEngine);
+				return this.keyManager.chooseEngineServerAlias(s, principals, sslEngine);
 			}
 			return this.alias;
 		}
 
+		@Override
 		public String chooseClientAlias(String[] keyType, Principal[] issuers,
 				Socket socket) {
-			return this.sourceKeyManager.chooseClientAlias(keyType, issuers, socket);
+			return this.keyManager.chooseClientAlias(keyType, issuers, socket);
 		}
 
+		@Override
 		public String chooseServerAlias(String keyType, Principal[] issuers,
 				Socket socket) {
-			return this.sourceKeyManager.chooseServerAlias(keyType, issuers, socket);
+			return this.keyManager.chooseServerAlias(keyType, issuers, socket);
 		}
 
+		@Override
 		public X509Certificate[] getCertificateChain(String alias) {
-			return this.sourceKeyManager.getCertificateChain(alias);
+			return this.keyManager.getCertificateChain(alias);
 		}
 
+		@Override
 		public String[] getClientAliases(String keyType, Principal[] issuers) {
-			return this.sourceKeyManager.getClientAliases(keyType, issuers);
+			return this.keyManager.getClientAliases(keyType, issuers);
 		}
 
+		@Override
 		public PrivateKey getPrivateKey(String alias) {
-			return this.sourceKeyManager.getPrivateKey(alias);
+			return this.keyManager.getPrivateKey(alias);
 		}
 
+		@Override
 		public String[] getServerAliases(String keyType, Principal[] issuers) {
-			return this.sourceKeyManager.getServerAliases(keyType, issuers);
+			return this.keyManager.getServerAliases(keyType, issuers);
 		}
 
 	}

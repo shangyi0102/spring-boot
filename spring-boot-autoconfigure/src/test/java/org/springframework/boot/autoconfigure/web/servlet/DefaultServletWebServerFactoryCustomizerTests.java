@@ -17,10 +17,12 @@
 package org.springframework.boot.autoconfigure.web.servlet;
 
 import java.io.File;
-import java.net.URL;
+import java.io.IOException;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TimeZone;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
@@ -31,20 +33,21 @@ import org.apache.catalina.Context;
 import org.apache.catalina.Valve;
 import org.apache.catalina.valves.AccessLogValve;
 import org.apache.catalina.valves.RemoteIpValve;
-import org.apache.catalina.webresources.TomcatURLStreamHandlerFactory;
 import org.apache.coyote.AbstractProtocol;
-import org.junit.AfterClass;
+import org.eclipse.jetty.server.NCSARequestLog;
+import org.eclipse.jetty.server.RequestLog;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.MockitoAnnotations;
 
-import org.springframework.beans.MutablePropertyValues;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
-import org.springframework.boot.bind.RelaxedDataBinder;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MockConfigurationPropertySource;
 import org.springframework.boot.web.embedded.jetty.JettyServletWebServerFactory;
+import org.springframework.boot.web.embedded.jetty.JettyWebServer;
 import org.springframework.boot.web.embedded.tomcat.TomcatContextCustomizer;
 import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
 import org.springframework.boot.web.embedded.tomcat.TomcatWebServer;
@@ -52,7 +55,6 @@ import org.springframework.boot.web.embedded.undertow.UndertowServletWebServerFa
 import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.mock.env.MockEnvironment;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -81,14 +83,6 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 	public void setup() throws Exception {
 		MockitoAnnotations.initMocks(this);
 		this.customizer = new DefaultServletWebServerFactoryCustomizer(this.properties);
-	}
-
-	@BeforeClass
-	@AfterClass
-	public static void uninstallUrlStreamHandlerFactory() {
-		ReflectionTestUtils.setField(TomcatURLStreamHandlerFactory.class, "instance",
-				null);
-		ReflectionTestUtils.setField(URL.class, "factory", null);
 	}
 
 	@Test
@@ -250,8 +244,8 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 	@Test
 	public void disableTomcatRemoteIpValve() throws Exception {
 		Map<String, String> map = new HashMap<>();
-		map.put("server.tomcat.remote_ip_header", "");
-		map.put("server.tomcat.protocol_header", "");
+		map.put("server.tomcat.remote-ip-header", "");
+		map.put("server.tomcat.protocol-header", "");
 		bindProperties(map);
 		TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory();
 		this.customizer.customize(factory);
@@ -262,8 +256,10 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 	public void defaultTomcatBackgroundProcessorDelay() throws Exception {
 		TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory();
 		this.customizer.customize(factory);
-		assertThat(((TomcatWebServer) factory.getWebServer()).getTomcat().getEngine()
-				.getBackgroundProcessorDelay()).isEqualTo(30);
+		TomcatWebServer webServer = (TomcatWebServer) factory.getWebServer();
+		assertThat(webServer.getTomcat().getEngine().getBackgroundProcessorDelay())
+				.isEqualTo(30);
+		webServer.stop();
 	}
 
 	@Test
@@ -273,16 +269,18 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 		bindProperties(map);
 		TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory();
 		this.customizer.customize(factory);
-		assertThat(((TomcatWebServer) factory.getWebServer()).getTomcat().getEngine()
-				.getBackgroundProcessorDelay()).isEqualTo(5);
+		TomcatWebServer webServer = (TomcatWebServer) factory.getWebServer();
+		assertThat(webServer.getTomcat().getEngine().getBackgroundProcessorDelay())
+				.isEqualTo(5);
+		webServer.stop();
 	}
 
 	@Test
 	public void defaultTomcatRemoteIpValve() throws Exception {
 		Map<String, String> map = new HashMap<>();
 		// Since 1.1.7 you need to specify at least the protocol
-		map.put("server.tomcat.protocol_header", "X-Forwarded-Proto");
-		map.put("server.tomcat.remote_ip_header", "X-Forwarded-For");
+		map.put("server.tomcat.protocol-header", "X-Forwarded-Proto");
+		map.put("server.tomcat.remote-ip-header", "X-Forwarded-For");
 		bindProperties(map);
 		testRemoteIpValveConfigured();
 	}
@@ -323,9 +321,9 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 	@Test
 	public void customTomcatRemoteIpValve() throws Exception {
 		Map<String, String> map = new HashMap<>();
-		map.put("server.tomcat.remote_ip_header", "x-my-remote-ip-header");
-		map.put("server.tomcat.protocol_header", "x-my-protocol-header");
-		map.put("server.tomcat.internal_proxies", "192.168.0.1");
+		map.put("server.tomcat.remote-ip-header", "x-my-remote-ip-header");
+		map.put("server.tomcat.protocol-header", "x-my-protocol-header");
+		map.put("server.tomcat.internal-proxies", "192.168.0.1");
 		map.put("server.tomcat.port-header", "x-my-forward-port");
 		map.put("server.tomcat.protocol-header-https-value", "On");
 		bindProperties(map);
@@ -390,6 +388,24 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 		try {
 			assertThat(embeddedFactory.getTomcat().getConnector().getMaxPostSize())
 					.isEqualTo(10000);
+		}
+		finally {
+			embeddedFactory.stop();
+		}
+	}
+
+	@Test
+	public void customTomcatDisableMaxHttpPostSize() {
+		Map<String, String> map = new HashMap<String, String>();
+		map.put("server.tomcat.max-http-post-size", "-1");
+		bindProperties(map);
+		TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory(0);
+		this.customizer.customize(factory);
+		TomcatWebServer embeddedFactory = (TomcatWebServer) factory.getWebServer();
+		embeddedFactory.start();
+		try {
+			assertThat(embeddedFactory.getTomcat().getConnector().getMaxPostSize())
+					.isEqualTo(-1);
 		}
 		finally {
 			embeddedFactory.stop();
@@ -510,6 +526,74 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 	}
 
 	@Test
+	public void jettyAccessLogCanBeEnabled() {
+		JettyServletWebServerFactory factory = new JettyServletWebServerFactory(0);
+		Map<String, String> map = new HashMap<>();
+		map.put("server.jetty.accesslog.enabled", "true");
+		bindProperties(map);
+		this.customizer.customize(factory);
+		JettyWebServer webServer = (JettyWebServer) factory.getWebServer();
+		try {
+			NCSARequestLog requestLog = getNCSARequestLog(webServer);
+			assertThat(requestLog.getFilename()).isNull();
+			assertThat(requestLog.isAppend()).isFalse();
+			assertThat(requestLog.isExtended()).isFalse();
+			assertThat(requestLog.getLogCookies()).isFalse();
+			assertThat(requestLog.getLogServer()).isFalse();
+			assertThat(requestLog.getLogLatency()).isFalse();
+		}
+		finally {
+			webServer.stop();
+		}
+	}
+
+	@Test
+	public void jettyAccessLogCanBeCustomized() throws IOException {
+		File logFile = File.createTempFile("jetty_log", ".log");
+		JettyServletWebServerFactory factory = new JettyServletWebServerFactory(0);
+		Map<String, String> map = new HashMap<>();
+		String timezone = TimeZone.getDefault().getID();
+		map.put("server.jetty.accesslog.enabled", "true");
+		map.put("server.jetty.accesslog.filename", logFile.getAbsolutePath());
+		map.put("server.jetty.accesslog.file-date-format", "yyyy-MM-dd");
+		map.put("server.jetty.accesslog.retention-period", "42");
+		map.put("server.jetty.accesslog.append", "true");
+		map.put("server.jetty.accesslog.extended-format", "true");
+		map.put("server.jetty.accesslog.date-format", "HH:mm:ss");
+		map.put("server.jetty.accesslog.locale", "en_BE");
+		map.put("server.jetty.accesslog.time-zone", timezone);
+		map.put("server.jetty.accesslog.log-cookies", "true");
+		map.put("server.jetty.accesslog.log-server", "true");
+		map.put("server.jetty.accesslog.log-latency", "true");
+		bindProperties(map);
+		this.customizer.customize(factory);
+		JettyWebServer webServer = (JettyWebServer) factory.getWebServer();
+		NCSARequestLog requestLog = getNCSARequestLog(webServer);
+		try {
+			assertThat(requestLog.getFilename()).isEqualTo(logFile.getAbsolutePath());
+			assertThat(requestLog.getFilenameDateFormat()).isEqualTo("yyyy-MM-dd");
+			assertThat(requestLog.getRetainDays()).isEqualTo(42);
+			assertThat(requestLog.isAppend()).isTrue();
+			assertThat(requestLog.isExtended()).isTrue();
+			assertThat(requestLog.getLogDateFormat()).isEqualTo("HH:mm:ss");
+			assertThat(requestLog.getLogLocale()).isEqualTo(new Locale("en", "BE"));
+			assertThat(requestLog.getLogTimeZone()).isEqualTo(timezone);
+			assertThat(requestLog.getLogCookies()).isTrue();
+			assertThat(requestLog.getLogServer()).isTrue();
+			assertThat(requestLog.getLogLatency()).isTrue();
+		}
+		finally {
+			webServer.stop();
+		}
+	}
+
+	private NCSARequestLog getNCSARequestLog(JettyWebServer webServer) {
+		RequestLog requestLog = webServer.getServer().getRequestLog();
+		assertThat(requestLog).isInstanceOf(NCSARequestLog.class);
+		return (NCSARequestLog) requestLog;
+	}
+
+	@Test
 	public void skipNullElementsForUndertow() throws Exception {
 		UndertowServletWebServerFactory factory = mock(
 				UndertowServletWebServerFactory.class);
@@ -533,8 +617,9 @@ public class DefaultServletWebServerFactoryCustomizerTests {
 	}
 
 	private void bindProperties(Map<String, String> map) {
-		new RelaxedDataBinder(this.properties, "server")
-				.bind(new MutablePropertyValues(map));
+		MockConfigurationPropertySource source = new MockConfigurationPropertySource();
+		map.forEach(source::put);
+		new Binder(source).bind("server", Bindable.ofInstance(this.properties));
 	}
 
 }

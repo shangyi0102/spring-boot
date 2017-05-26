@@ -22,7 +22,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import org.springframework.beans.factory.BeanCreationException;
-import org.springframework.boot.test.util.EnvironmentTestUtils;
+import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.mock.web.MockServletContext;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -59,7 +59,7 @@ public class WebServicesAutoConfigurationTests {
 	@Test
 	public void customPathMustBeginWithASlash() {
 		this.thrown.expect(BeanCreationException.class);
-		this.thrown.expectMessage("Path must start with /");
+		this.thrown.expectMessage("Failed to bind properties under 'spring.webservices'");
 		load(WebServicesAutoConfiguration.class, "spring.webservices.path=invalid");
 	}
 
@@ -104,7 +104,7 @@ public class WebServicesAutoConfigurationTests {
 	private void load(Class<?> config, String... environment) {
 		AnnotationConfigWebApplicationContext context = new AnnotationConfigWebApplicationContext();
 		context.setServletContext(new MockServletContext());
-		EnvironmentTestUtils.addEnvironment(context, environment);
+		TestPropertyValues.of(environment).applyTo(context);
 		context.register(config);
 		context.refresh();
 		this.context = context;

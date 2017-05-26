@@ -38,8 +38,8 @@ When your application starts you should see something similar to the following:
  :: Spring Boot ::   v{spring-boot-version}
 
 2013-07-31 00:08:16.117  INFO 56603 --- [           main] o.s.b.s.app.SampleApplication            : Starting SampleApplication v0.1.0 on mycomputer with PID 56603 (/apps/myapp.jar started by pwebb)
-2013-07-31 00:08:16.166  INFO 56603 --- [           main] ationConfigEmbeddedWebApplicationContext : Refreshing org.springframework.boot.context.embedded.AnnotationConfigEmbeddedWebApplicationContext@6e5a8246: startup date [Wed Jul 31 00:08:16 PDT 2013]; root of context hierarchy
-2014-03-04 13:09:54.912  INFO 41370 --- [           main] .t.TomcatEmbeddedServletContainerFactory : Server initialized with port: 8080
+2013-07-31 00:08:16.166  INFO 56603 --- [           main] ationConfigServletWebServerApplicationContext : Refreshing org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext@6e5a8246: startup date [Wed Jul 31 00:08:16 PDT 2013]; root of context hierarchy
+2014-03-04 13:09:54.912  INFO 41370 --- [           main] .t.TomcatServletWebServerFactory : Server initialized with port: 8080
 2014-03-04 13:09:56.501  INFO 41370 --- [           main] o.s.b.s.app.SampleApplication            : Started SampleApplication in 2.992 seconds (JVM running for 3.658)
 ----
 
@@ -248,7 +248,7 @@ exist. Internally, Spring Boot uses events to handle a variety of tasks.
 === Web environment
 A `SpringApplication` will attempt to create the right type of `ApplicationContext` on
 your behalf. By default, an `AnnotationConfigApplicationContext` or
-`AnnotationConfigEmbeddedWebApplicationContext` will be used, depending on whether you
+`AnnotationConfigServletWebServerApplicationContext` will be used, depending on whether you
 are developing a web application or not.
 
 The algorithm used to determine a '`web environment`' is fairly simplistic (based on the
@@ -665,6 +665,22 @@ with a mutable value, e.g. this will bind to the properties above
 		}
 	}
 ----
+
+[NOTE]
+====
+Extra care is required when configuring lists that way as overriding will not work as you
+would expect. In the example above, when `my.servers` is redefined in several places, the
+individual elements are targeted for override, not the list. To make sure that a
+`PropertySource` with higher precedence can override the list, you need to define it as
+a single property:
+
+[source,yaml,indent=0]
+----
+	 my:
+		servers: dev.bar.com,foo.bar.com
+----
+
+====
 
 
 
@@ -2294,7 +2310,7 @@ inside a war will break Spring Boot applications.
 
 If you need to perform servlet context initialization in a Spring Boot application, you
 should register a bean that implements the
-`org.springframework.boot.context.embedded.ServletContextInitializer` interface. The
+`org.springframework.boot.web.servlet.ServletContextInitializer` interface. The
 single `onStartup` method provides access to the `ServletContext`, and can easily be used
 as an adapter to an existing `WebApplicationInitializer` if necessary.
 
@@ -2311,17 +2327,17 @@ container's built-in discovery mechanisms will be used instead.
 
 
 [[boot-features-embedded-container-application-context]]
-==== The EmbeddedWebApplicationContext
+==== The ServletWebServerApplicationContext
 Under the hood Spring Boot uses a new type of `ApplicationContext` for embedded servlet
-container support.  The `EmbeddedWebApplicationContext` is a special type of
+container support.  The `ServletWebServerApplicationContext` is a special type of
 `WebApplicationContext` that bootstraps itself by searching for a single
-`EmbeddedServletContainerFactory` bean. Usually a `TomcatEmbeddedServletContainerFactory`,
-`JettyEmbeddedServletContainerFactory`, or `UndertowEmbeddedServletContainerFactory` will
+`ServletWebServerFactory` bean. Usually a `TomcatServletWebServerFactory`,
+`JettyServletWebServerFactory`, or `UndertowServletWebServerFactory` will
 have been auto-configured.
 
 NOTE: You usually won't need to be aware of these implementation classes. Most
 applications will be auto-configured and the appropriate `ApplicationContext` and
-`EmbeddedServletContainerFactory` will be created on your behalf.
+`ServletWebServerFactory` will be created on your behalf.
 
 
 
@@ -2356,22 +2372,23 @@ class for a complete list.
 [[boot-features-programmatic-embedded-container-customization]]
 ===== Programmatic customization
 If you need to configure your embedded servlet container programmatically you can
-register a Spring bean that implements the `EmbeddedServletContainerCustomizer` interface.
-`EmbeddedServletContainerCustomizer` provides access to the
-`ConfigurableEmbeddedServletContainer` which includes numerous customization setter
-methods.
+register a Spring bean that implements the `WebServerFactoryCustomizer` interface.
+`WebServerFactoryCustomizer` provides access to the
+`ConfigurableServletWebServerFactory` which includes numerous customization setter
+methods. Dedicated variants exists for Tomcat, Jetty and Undertow.
 
 [source,java,indent=0]
 ----
-	import org.springframework.boot.context.embedded.*;
+	import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+	import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 	import org.springframework.stereotype.Component;
 
 	@Component
-	public class CustomizationBean implements EmbeddedServletContainerCustomizer {
+	public class CustomizationBean implements WebServerFactoryCustomizer<ConfigurableServletWebServerFactory> {
 
 		@Override
-		public void customize(ConfigurableEmbeddedServletContainer container) {
-			container.setPort(9000);
+		public void customize(ConfigurableServletWebServerFactory server) {
+			server.setPort(9000);
 		}
 
 	}
@@ -2379,17 +2396,17 @@ methods.
 
 
 
-[[boot-features-customizing-configurableembeddedservletcontainerfactory-directly]]
-===== Customizing ConfigurableEmbeddedServletContainer directly
+[[boot-features-customizing-configurableservletwebserverfactory-directly]]
+===== Customizing ConfigurableServletWebServerFactory directly
 If the above customization techniques are too limited, you can register the
-`TomcatEmbeddedServletContainerFactory`, `JettyEmbeddedServletContainerFactory` or
-`UndertowEmbeddedServletContainerFactory` bean yourself.
+`TomcatServletWebServerFactory`, `JettyServletWebServerFactory` or
+`UndertowServletWebServerFactory` bean yourself.
 
 [source,java,indent=0]
 ----
 	@Bean
-	public EmbeddedServletContainerFactory servletContainer() {
-		TomcatEmbeddedServletContainerFactory factory = new TomcatEmbeddedServletContainerFactory();
+	public ConfigurableServletWebServerFactory webServerFactory() {
+		TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory();
 		factory.setPort(9000);
 		factory.setSessionTimeout(10, TimeUnit.MINUTES);
 		factory.addErrorPages(new ErrorPage(HttpStatus.NOT_FOUND, "/notfound.html"));
@@ -2805,10 +2822,10 @@ ensuring that it happens once access to the database is no longer needed.
 Production database connections can also be auto-configured using a pooling `DataSource`.
 Here's the algorithm for choosing a specific implementation:
 
-* We prefer the Tomcat pooling `DataSource` for its performance and concurrency, so if
-  that is available we always choose it.
-* Otherwise, if HikariCP is available we will use it.
-* If neither the Tomcat pooling datasource nor HikariCP are available and if Commons
+* We prefer HikariCP for its performance and concurrency, so if that is available we
+  always choose it.
+* Otherwise, if the Tomcat pooling `DataSource` is available we will use it.
+* If neither HikariCP nor the Tomcat pooling datasource are available and if Commons
   DBCP2 is available we will use it.
 
 If you use the `spring-boot-starter-jdbc` or `spring-boot-starter-data-jpa`
@@ -2847,8 +2864,8 @@ loadable.
 See {sc-spring-boot-autoconfigure}/jdbc/DataSourceProperties.{sc-ext}[`DataSourceProperties`]
 for more of the supported options. These are the standard options that work regardless of
 the actual implementation. It is also possible to fine-tune implementation-specific
-settings using their respective prefix (`+spring.datasource.tomcat.*+`,
-`+spring.datasource.hikari.*+`, and `+spring.datasource.dbcp2.*+`). Refer to the
+settings using their respective prefix (`+spring.datasource.hikari.*+`,
+`+spring.datasource.tomcat.*+`, and `+spring.datasource.dbcp2.*+`). Refer to the
 documentation of the connection pool implementation you are using for more details.
 
 For instance, if you are using the
@@ -3245,10 +3262,14 @@ http://projects.spring.io/spring-data[projects.spring.io/spring-data].
 === Redis
 http://redis.io/[Redis] is a cache, message broker and richly-featured key-value store.
 Spring Boot offers basic auto-configuration for the
-https://github.com/xetorthio/jedis/[Jedis] client library and abstractions on top of it
-provided by https://github.com/spring-projects/spring-data-redis[Spring Data Redis]. There
-is a `spring-boot-starter-data-redis` '`Starter`' for collecting the dependencies in a
-convenient way.
+https://github.com/xetorthio/jedis/[Jedis] and https://github.com/mp911de/lettuce/[Lettuce]
+client library and abstractions on top of it provided by
+https://github.com/spring-projects/spring-data-redis[Spring Data Redis].
+
+There is a `spring-boot-starter-data-redis` '`Starter`' for collecting the dependencies in
+a convenient way that uses https://github.com/xetorthio/jedis/[Jedis] by default. If you
+are building a reactive application, the `spring-boot-starter-data-redis-reactive`
+'`Starter`' will get you going.
 
 
 
@@ -3503,6 +3524,13 @@ persistence for the embedded mode:
 	spring.data.neo4j.uri=file://var/tmp/graph.db
 ----
 
+[NOTE]
+====
+The Neo4j OGM embedded driver does not provide the Neo4j kernel. Users are expected to
+provide this dependency manually, see
+http://neo4j.com/docs/ogm-manual/current/reference/#reference:getting-started[the documentation]
+for more details.
+====
 
 
 [[boot-features-neo4j-ogm-session]]
@@ -3979,7 +4007,9 @@ your custom attribute types or object classes.
 The Spring Framework provides support for transparently adding caching to an application.
 At its core, the abstraction applies caching to methods, reducing thus the number of
 executions based on the information available in the cache. The caching logic is applied
-transparently, without any interference to the invoker.
+transparently, without any interference to the invoker.  Spring Boot auto-configures the
+cache infrastructure as long as the caching support is enabled via the `@EnableCaching`
+annotation.
 
 NOTE: Check the {spring-reference}/#cache[relevant section] of the Spring Framework
 reference for more details.
@@ -3989,14 +4019,13 @@ relevant annotation to its method:
 
 [source,java,indent=0]
 ----
-	import javax.cache.annotation.CacheResult;
-
+    import org.springframework.cache.annotation.Cacheable
 	import org.springframework.stereotype.Component;
 
 	@Component
 	public class MathService {
 
-		@CacheResult
+		@Cacheable("piDecimals")
 		public int computePiDecimal(int i) {
 			// ...
 		}
@@ -4004,29 +4033,37 @@ relevant annotation to its method:
 	}
 ----
 
-NOTE: You can either use the standard JSR-107 (JCache) annotations or Spring's own
-caching annotations transparently. We strongly advise you however to not mix and match
-them.
+This example demonstrates the use of caching on a potentially costly operation. Before
+invoking `computePiDecimal`, the abstraction will look for an entry in the `piDecimals`
+cache matching the `i` argument. If an entry is found, the content in the cache is
+immediately returned to the caller and the method is not invoked. Otherwise, the method is
+invoked and the cache is updated before returning the value.
+
+NOTE: You can also use the standard JSR-107 (JCache) annotations (e.g. `@CacheResult`)
+transparently. We strongly advise you however to not mix and match them.
+
+If you do not add any specific cache library, Spring Boot will auto-configure a
+<<boot-features-caching-provider-simple,Simple provider>> that uses concurrent maps in
+memory. When a cache is required (i.e. `piDecimals` in the example above), this provider
+will create it on-the-fly for you. The simple provider is not really recommended for
+production usage, but it's great for getting started and making sure that you understand
+the features. When you have made up your mind about the cache provider to use, please make
+sure to read its documentation to figure out how to configure the caches that your
+application uses. Practically all providers require you to explicitly configure every
+cache that you use in the application. Some offers a way to build default caches that you
+need to specify with the `spring.cache.cache-names` property.
 
 TIP: It is also possible to {spring-reference}/#cache-annotations-put[update] or
 {spring-reference}/#cache-annotations-evict[evict] data from the cache transparently.
 
+NOTE: If you are using the cache infrastructure with beans that are not interface-based,
+make sure to enable the `proxyTargetClass` attribute of `@EnableCaching`.
 
 
 === Supported cache providers
 The cache abstraction does not provide an actual store and relies on abstraction
 materialized by the `org.springframework.cache.Cache` and
-`org.springframework.cache.CacheManager` interfaces. Spring Boot auto-configures a
-suitable `CacheManager` according to the implementation as long as the caching support is
-enabled via the `@EnableCaching` annotation.
-
-NOTE: If you are using the cache infrastructure with beans that are not interface-based,
-make sure to enable the `proxyTargetClass` attribute of `@EnableCaching`.
-
-TIP: Use the `spring-boot-starter-cache` '`Starter`' to quickly add basic caching
-dependencies. The starter brings `spring-context-support`: if you are adding dependencies
-manually, you must include it if you intend to use the JCache, EhCache 2.x or Guava
-support.
+`org.springframework.cache.CacheManager` interfaces.
 
 If you haven't defined a bean of type `CacheManager` or a `CacheResolver` named
 `cacheResolver` (see `CachingConfigurer`), Spring Boot tries to detect the following
@@ -4047,9 +4084,15 @@ TIP: It is also possible to _force_ the cache provider to use via the `spring.ca
 property. Use this property if you need to <<boot-features-caching-provider-none,disable
 caching altogether>> in certain environment (e.g. tests).
 
+TIP: Use the `spring-boot-starter-cache` '`Starter`' to quickly add basic caching
+dependencies. The starter brings in `spring-context-support`: if you are adding
+dependencies manually, you must include `spring-context-support` in order to use the
+JCache, EhCache 2.x or Guava support.
+
 If the `CacheManager` is auto-configured by Spring Boot, you can further tune its
 configuration before it is fully initialized by exposing a bean implementing the
-`CacheManagerCustomizer` interface. The following sets the cache names to use.
+`CacheManagerCustomizer` interface. The following sets a flag to say that null
+values should be passed down to the underlying map.
 
 [source,java,indent=0]
 ----
@@ -4058,7 +4101,7 @@ configuration before it is fully initialized by exposing a bean implementing the
 		return new CacheManagerCustomizer<ConcurrentMapCacheManager>() {
 			@Override
 			public void customize(ConcurrentMapCacheManager cacheManager) {
-				cacheManager.setCacheNames(Arrays.asList("one", "two"));
+				cacheManager.setAllowNullValues(false);
 			}
 		};
 	}
@@ -4066,8 +4109,9 @@ configuration before it is fully initialized by exposing a bean implementing the
 
 [NOTE]
 ====
-In the example above, a `ConcurrentMapCacheManager` is expected to be configured. If that
-is not the case, the customizer won't be invoked at all. You can have as many customizers
+In the example above, an auto-configured `ConcurrentMapCacheManager` is expected. If that
+is not the case (either you provided your own config or a different cache provider was
+auto-configured), the customizer won't be invoked at all. You can have as many customizers
 as you want and you can also order them as usual using `@Order` or `Ordered`.
 ====
 
@@ -4076,7 +4120,8 @@ as you want and you can also order them as usual using `@Order` or `Ordered`.
 [[boot-features-caching-provider-generic]]
 ==== Generic
 Generic caching is used if the context defines _at least_ one
-`org.springframework.cache.Cache` bean, a `CacheManager` wrapping them is configured.
+`org.springframework.cache.Cache` bean. A `CacheManager` wrapping all beans of that type
+is created.
 
 
 
@@ -4158,6 +4203,13 @@ Infinispan has no default configuration file location so it must be specified ex
 Caches can be created on startup via the `spring.cache.cache-names` property. If a custom
 `ConfigurationBuilder` bean is defined, it is used to customize them.
 
+[NOTE]
+====
+The support of Infinispan in Spring Boot is restricted to the embedded mode and is quite
+basic. If you want more options you should use the official Infinispan Spring Boot starter
+instead, check
+https://github.com/infinispan/infinispan-spring-boot[the documentation] for more details.
+====
 
 
 [[boot-features-caching-provider-couchbase]]
@@ -4257,10 +4309,20 @@ auto-configuration.
 
 [[boot-features-caching-provider-simple]]
 ==== Simple
-If none of these options worked out, a simple implementation using `ConcurrentHashMap`
-as cache store is configured. This is the default if no caching library is present in
-your application.
+If none of the other providers can be found, a simple implementation using a
+`ConcurrentHashMap` as cache store is configured. This is the default if no caching
+library is present in your application. Caches are created on-the-fly by default but you
+can restrict the list of available caches using the `cache-names` property. For instance,
+if you you want only a `foo` and `bar` caches:
 
+[source,properties,indent=0]
+----
+    spring.cache.cache-names=foo,bar
+----
+
+If you do this and your application uses a cache not listed then it will fail at runtime
+when the cache is needed, but not on startup. This is similar to the way the "real" cache
+providers behave if you use an undeclared cache.
 
 
 [[boot-features-caching-provider-none]]
@@ -4591,9 +4653,10 @@ the broker connection is lost. Retries are disabled by default.
 ==== Receiving a message
 When the Rabbit infrastructure is present, any bean can be annotated with
 `@RabbitListener` to create a listener endpoint. If no `RabbitListenerContainerFactory`
-has been defined, a default one is configured automatically.  If a `MessageConverter` or
-`MessageRecoverer` beans are defined, they are associated automatically to the default
-factory.
+has been defined, a default `SimpleRabbitListenerContainerFactory` is configured
+automatically and you can switch to a direct container using the
+`spring.rabbitmq.listener.type` property.  If a `MessageConverter` or `MessageRecoverer`
+beans are defined, they are associated automatically to the default factory.
 
 The following component creates a listener endpoint on the `someQueue` queue:
 
@@ -4615,9 +4678,13 @@ for more details.
 
 If you need to create more `RabbitListenerContainerFactory` instances or if you want to
 override the default, Spring Boot provides a
-`SimpleRabbitListenerContainerFactoryConfigurer` that you can use to initialize a
-`SimpleRabbitListenerContainerFactory` with the same settings as the one that is
-auto-configured.
+`SimpleRabbitListenerContainerFactoryConfigurer` and
+`DirectRabbitListenerContainerFactoryConfigurer` that you can use to initialize a
+`SimpleRabbitListenerContainerFactory` and `DirectRabbitListenerContainerFactory` with the
+same settings as the one used by the auto-configuration.
+
+TIP: It doesn't matter which container type you've chosen, those two beans are exposed by
+the auto-configuration.
 
 For instance, the following exposes another factory that uses a specific
 `MessageConverter`:
@@ -4885,7 +4952,7 @@ to avoid having a thread blocked by an unresponsive mail server:
 
 [source,properties,indent=0]
 ----
-	spring.mail.properties.mail.smtp.connecttimeout=5000
+	spring.mail.properties.mail.smtp.connectiontimeout=5000
 	spring.mail.properties.mail.smtp.timeout=3000
 	spring.mail.properties.mail.smtp.writetimeout=5000
 ----
@@ -5049,9 +5116,8 @@ provide good examples of how to write XA wrappers.
 [[boot-features-hazelcast]]
 == Hazelcast
 
-If hazelcast is on the classpath, Spring Boot will auto-configure an `HazelcastInstance`
-that you can inject in your application. The `HazelcastInstance` is only created if a
-configuration is found.
+If hazelcast is on the classpath and a suitable configuration is found, Spring Boot
+will auto-configure an `HazelcastInstance` that you can inject in your application.
 
 You can define a `com.hazelcast.config.Config` bean and we'll use that. If your
 configuration defines an instance name, we'll try to locate an existing instance rather
@@ -5070,6 +5136,14 @@ classpath. We also check if the `hazelcast.config` system property is set. Check
 http://docs.hazelcast.org/docs/latest/manual/html-single/[Hazelcast documentation] for
 more details.
 
+If `hazelcast-client` is present on the classpath, Spring Boot will first attempt to
+create a client with similar rules as above, that is:
+
+* The presence of a `com.hazelcast.client.config.ClientConfig` bean
+* A configuration file defined by the `spring.hazelcast.config` property
+* The presence of the `hazelcast.client.config` system property
+* A `hazelcast-client.xml` in the working directory or at the root of the classpath
+
 NOTE: Spring Boot also has an
 <<boot-features-caching-provider-hazelcast,explicit caching support for Hazelcast>>. The
 `HazelcastInstance` is automatically wrapped in a `CacheManager` implementation if
@@ -5083,10 +5157,23 @@ Spring Boot offers several conveniences for working with Spring Integration, inc
 the `spring-boot-starter-integration` '`Starter`'. Spring Integration provides
 abstractions over messaging and also other transports such as HTTP, TCP etc. If Spring
 Integration is available on your classpath it will be initialized through the
-`@EnableIntegration` annotation. Message processing statistics will be published over JMX
-if `'spring-integration-jmx'` is also on the classpath. See the
+`@EnableIntegration` annotation.
+
+Spring Boot will also configure some features that are triggered by the presence of
+additional Spring Integration modules. Message processing statistics will be published
+over JMX if `'spring-integration-jmx'` is also on the classpath. If
+`'spring-integration-jdbc'` is available, the default database schema can be created
+on startup:
+
+[source,properties,indent=0]
+----
+	spring.integration.jdbc.initializer.enabled=true
+----
+
+See the
 {sc-spring-boot-autoconfigure}/integration/IntegrationAutoConfiguration.{sc-ext}[`IntegrationAutoConfiguration`]
-class for more details.
+and {sc-spring-boot-autoconfigure}/integration/IntegrationProperties.{sc-ext}[`IntegrationProperties`]
+classes for more details.
 
 
 
@@ -5095,7 +5182,6 @@ class for more details.
 Spring Boot provides Spring Session auto-configuration for a wide range of stores:
 
 * JDBC
-* MongoDB
 * Redis
 * Hazelcast
 * HashMap
@@ -5210,14 +5296,19 @@ how your tests will run:
   APIs are not on your classpath this mode will transparently fallback to creating a
   regular non-web `ApplicationContext`. Can be used in conjunction with
   `@AutoConfigureMockMvc` for `MockMvc`-based testing of your application.
-* `RANDOM_PORT` -- Loads an `EmbeddedWebApplicationContext` and provides a real
+* `RANDOM_PORT` -- Loads an `ServletWebServerApplicationContext` and provides a real
   servlet environment. Embedded servlet containers are started and listening on a random
   port.
-* `DEFINED_PORT` -- Loads an `EmbeddedWebApplicationContext` and provides a real
+* `DEFINED_PORT` -- Loads an `ServletWebServerApplicationContext` and provides a real
   servlet environment. Embedded servlet containers are started and listening on a defined
   port (i.e from your `application.properties` or on the default port `8080`).
 * `NONE` -- Loads an `ApplicationContext` using `SpringApplication` but does not provide
   _any_ servlet environment (mock or otherwise).
+
+NOTE: If your test is `@Transactional`, it will rollback the transaction at the end of
+each test method by default. If you're using this arrangement in combination with either
+`RANDOM_PORT` or `DEFINED_PORT`, any transaction initiated on the server won't rollback as
+the test is running in a different thread than the server processing.
 
 NOTE: In addition to `@SpringBootTest` a number of other annotations are also
 provided for testing more specific slices of an application. See below for details.
@@ -5257,16 +5348,29 @@ potentially time consuming process of loading the context will only happen once.
 [[boot-features-testing-spring-boot-applications-excluding-config]]
 ==== Excluding test configuration
 If your application uses component scanning, for example if you use
-`@SpringBootApplication` or `@ComponentScan`, you may find components or configurations
+`@SpringBootApplication` or `@ComponentScan`, you may find top-level configuration classes
 created only for specific tests accidentally get picked up everywhere.
 
-To help prevent this, Spring Boot provides `@TestComponent` and `@TestConfiguration`
-annotations that can be used on classes in `src/test/java` to indicate that they should
-not be picked up by scanning.
+As we <<boot-features-testing-spring-boot-applications-detecting-config,have seen above>>,
+`@TestConfiguration` can be used on an inner class of a test to customize the primary
+configuration. When placed on a top-level class, `@TestConfiguration` indicates that
+classes in `src/test/java` should not be picked up by scanning. You can then import that
+class explicitly where it is required:
 
-NOTE: `@TestComponent` and `@TestConfiguration` are only needed on top level classes. If
-you define `@Configuration` or `@Component` as inner-classes within a test (any class
-that has `@Test` methods or `@RunWith`), they will be automatically filtered.
+[source,java,indent=0]
+----
+	@RunWith(SpringRunner.class)
+	@SpringBootTest
+	@Import(MyTestsConfiguration.class)
+	public class MyTests {
+
+		@Test
+		public void exampleTest() {
+			...
+		}
+
+	}
+----
 
 NOTE: If you directly use `@ComponentScan` (i.e. not via `@SpringBootApplication`) you
 will need to register the `TypeExcludeFilter` with it. See
@@ -5710,6 +5814,108 @@ A list of the auto-configuration that is enabled by `@DataMongoTest` can be
 
 
 
+[[boot-features-testing-spring-boot-applications-testing-autoconfigured-neo4j-test]]
+==== Auto-configured Data Neo4j tests
+`@DataNeo4jTest` can be used if you want to test Neo4j applications. By default, it will
+use an in-memory embedded Neo4j (if the embedded driver is available), scan for
+`@NodeEntity` classes and configure Spring Data Neo4j repositories. Regular `@Component`
+beans will not be loaded into the `ApplicationContext`:
+
+[source,java,indent=0]
+----
+	import org.junit.runner.RunWith;
+	import org.springframework.beans.factory.annotation.Autowired;
+	import org.springframework.boot.test.autoconfigure.data.neo4j.DataNeo4jTest;
+	import org.springframework.test.context.junit4.SpringRunner;
+
+	@RunWith(SpringRunner.class)
+	@DataNeo4jTest
+	public class ExampleDataNeo4jTests {
+
+		@Autowired
+		private YourRepository repository;
+
+		//
+	}
+----
+
+Data Neo4j tests are transactional and rollback at the end of each test by default,
+see the {spring-reference}#testcontext-tx-enabling-transactions[relevant section] in the
+Spring Reference Documentation for more details. If that's not what you want, you can
+disable transaction management for a test or for the whole class as follows:
+
+[source,java,indent=0]
+----
+	import org.junit.Test;
+	import org.junit.runner.RunWith;
+	import org.springframework.boot.test.autoconfigure.data.neo4j.DataNeo4jTest;
+	import org.springframework.test.context.junit4.SpringRunner;
+	import org.springframework.transaction.annotation.Propagation;
+	import org.springframework.transaction.annotation.Transactional;
+
+	@RunWith(SpringRunner.class)
+	@DataNeo4jTest
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
+	public class ExampleNonTransactionalTests {
+
+	}
+----
+
+
+A list of the auto-configuration that is enabled by `@DataNeo4jTest` can be
+<<appendix-test-auto-configuration#test-auto-configuration,found in the appendix>>.
+
+
+
+[[boot-features-testing-spring-boot-applications-testing-autoconfigured-ldap-test]]
+==== Auto-configured Data LDAP tests
+`@DataLdapTest` can be used if you want to test LDAP applications. By default, it will
+configure an in-memory embedded LDAP (if available), a `LdapTemplate`, scan for `@Entry`
+classes and configure Spring Data LDAP repositories. Regular `@Component` beans will not
+be loaded into the `ApplicationContext`:
+
+[source,java,indent=0]
+----
+	import org.junit.runner.RunWith;
+	import org.springframework.beans.factory.annotation.Autowired;
+	import org.springframework.boot.test.autoconfigure.data.ldap.DataLdapTest;
+	import org.springframework.ldap.core.LdapTemplate;
+	import org.springframework.test.context.junit4.SpringRunner;
+
+	@RunWith(SpringRunner.class)
+	@DataLdapTest
+	public class ExampleDataLdapTests {
+
+		@Autowired
+		private LdapTemplate ldapTemplate;
+
+		//
+	}
+----
+
+In-memory embedded LDAP generally works well for tests since it is fast and doesn't
+require any developer installation. If, however, you prefer to run tests against a real
+LDAP server you should exclude the embedded LDAP auto-configuration:
+
+[source,java,indent=0]
+----
+	import org.junit.runner.RunWith;
+    import org.springframework.boot.autoconfigure.ldap.embedded.EmbeddedLdapAutoConfiguration;
+	import org.springframework.boot.test.autoconfigure.data.ldap.DataLdapTest;
+	import org.springframework.test.context.junit4.SpringRunner;
+
+	@RunWith(SpringRunner.class)
+	@DataLdapTest(excludeAutoConfiguration = EmbeddedLdapAutoConfiguration.class)
+	public class ExampleDataLdapNonEmbeddedTests {
+
+	}
+----
+
+A list of the auto-configuration that is enabled by `@DataLdapTest` can be
+<<appendix-test-auto-configuration#test-auto-configuration,found in the appendix>>.
+
+
+
 [[boot-features-testing-spring-boot-applications-testing-autoconfigured-rest-client]]
 ==== Auto-configured REST clients
 The `@RestClientTest` annotation can be used if you want to test REST clients. By default
@@ -5830,27 +6036,10 @@ automatically generate the default snippets:
 ==== Using Spock to test Spring Boot applications
 If you wish to use Spock to test a Spring Boot application you should add a dependency
 on Spock's `spock-spring` module to your application's build. `spock-spring` integrates
-Spring's test framework into Spock. Exactly how you can use Spock to test a Spring Boot
-application depends on the version of Spock that you are using.
-
-NOTE: Spring Boot provides dependency management for Spock 1.0. If you wish to use Spock
-1.1 you should <<howto.adoc#howto-customize-dependency-versions,override the
-`spock.version` property>> in your `build.gradle` or `pom.xml` file.
-
-When using Spock 1.1, the annotations <<boot-features-testing-spring-boot-applications,
-described above>> can only be used and you can annotate your `Specification` with
-`@SpringBootTest` to suit the needs of your tests.
-
-When using Spock 1.0, `@SpringBootTest` will not work for a web project. You need to use
-`@SpringApplicationConfiguration` and `@WebIntegrationTest(randomPort = true)`. Being
-unable to use `@SpringBootTest` means that you also lose the auto-configured
-`TestRestTemplate` bean. You can create an equivalent bean yourself using the following
-configuration:
-
-[source,java,indent=0]
-----
-include::{code-examples}/test/spock/SpockTestRestTemplateExample.java[tag=test-rest-template-configuration]
-----
+Spring's test framework into Spock. It is recommended that you use Spock 1.1 or later to
+benefit from a number of recent improvements to Spock's Spring Framework and Spring Boot
+integration. Please refer to http://spockframework.org/spock/docs/1.1/modules.html[the
+documentation for Spock's Spring module] for further details.
 
 
 
@@ -6094,6 +6283,13 @@ the fact that annotation metadata is parsed using http://asm.ow2.org/[ASM] you c
 actually use the `value` attribute to refer to the real class, even though that class
 might not actually appear on the running application classpath. You can also use the
 `name` attribute if you prefer to specify the class name using a `String` value.
+
+[TIP]
+====
+If you are using `@ConditionalOnClass` or `@ConditionalOnMissingClass` as a part of a
+meta-annotation to compose your own composed annotations you must use `name` as referring
+to the class in such a case is not handled.
+====
 
 
 

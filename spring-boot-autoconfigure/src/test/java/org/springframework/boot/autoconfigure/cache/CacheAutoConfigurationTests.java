@@ -49,13 +49,16 @@ import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.runner.RunWith;
 
 import org.springframework.beans.DirectFieldAccessor;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.boot.autoconfigure.cache.support.MockCachingProvider;
 import org.springframework.boot.autoconfigure.hazelcast.HazelcastAutoConfiguration;
-import org.springframework.boot.test.util.EnvironmentTestUtils;
+import org.springframework.boot.junit.runner.classpath.ClassPathExclusions;
+import org.springframework.boot.junit.runner.classpath.ModifiedClassPathRunner;
+import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurerSupport;
@@ -91,6 +94,8 @@ import static org.mockito.Mockito.verify;
  * @author Stephane Nicoll
  * @author Eddú Meléndez
  */
+@RunWith(ModifiedClassPathRunner.class)
+@ClassPathExclusions("hazelcast-client-*.jar")
 public class CacheAutoConfigurationTests {
 
 	@Rule
@@ -145,8 +150,7 @@ public class CacheAutoConfigurationTests {
 	@Test
 	public void notSupportedCachingMode() {
 		this.thrown.expect(BeanCreationException.class);
-		this.thrown.expectMessage("cache");
-		this.thrown.expectMessage("foobar");
+		this.thrown.expectMessage("Failed to bind properties under 'spring.cache.type'");
 		load(DefaultCacheConfiguration.class, "spring.cache.type=foobar");
 	}
 
@@ -499,7 +503,8 @@ public class CacheAutoConfigurationTests {
 			load(DefaultCacheConfiguration.class, "spring.cache.type=jcache",
 					"spring.cache.jcache.provider=" + cachingProviderFqn,
 					"spring.cache.jcache.config=" + configLocation);
-			JCacheCacheManager cacheManager = validateCacheManager(JCacheCacheManager.class);
+			JCacheCacheManager cacheManager = validateCacheManager(
+					JCacheCacheManager.class);
 
 			Resource configResource = new ClassPathResource(configLocation);
 			assertThat(cacheManager.getCacheManager().getURI())
@@ -515,14 +520,15 @@ public class CacheAutoConfigurationTests {
 	public void hazelcastAsJCacheWithExistingHazelcastInstance() throws IOException {
 		String cachingProviderFqn = HazelcastCachingProvider.class.getName();
 		load(new Class[] { HazelcastAutoConfiguration.class,
-						DefaultCacheConfiguration.class }, "spring.cache.type=jcache",
+				DefaultCacheConfiguration.class }, "spring.cache.type=jcache",
 				"spring.cache.jcache.provider=" + cachingProviderFqn);
 		JCacheCacheManager cacheManager = validateCacheManager(JCacheCacheManager.class);
 		javax.cache.CacheManager jCacheManager = cacheManager.getCacheManager();
-		assertThat(jCacheManager).isInstanceOf(
-				com.hazelcast.cache.HazelcastCacheManager.class);
+		assertThat(jCacheManager)
+				.isInstanceOf(com.hazelcast.cache.HazelcastCacheManager.class);
 		assertThat(this.context.getBeansOfType(HazelcastInstance.class)).hasSize(1);
-		HazelcastInstance hazelcastInstance = this.context.getBean(HazelcastInstance.class);
+		HazelcastInstance hazelcastInstance = this.context
+				.getBean(HazelcastInstance.class);
 		assertThat(((com.hazelcast.cache.HazelcastCacheManager) jCacheManager)
 				.getHazelcastInstance()).isSameAs(hazelcastInstance);
 		assertThat(hazelcastInstance.getName()).isEqualTo("default-instance");
@@ -596,7 +602,8 @@ public class CacheAutoConfigurationTests {
 			load(JCacheWithCustomizerConfiguration.class, "spring.cache.type=jcache",
 					"spring.cache.jcache.provider=" + cachingProviderFqn,
 					"spring.cache.cacheNames[0]=foo", "spring.cache.cacheNames[1]=bar");
-			JCacheCacheManager cacheManager = validateCacheManager(JCacheCacheManager.class);
+			JCacheCacheManager cacheManager = validateCacheManager(
+					JCacheCacheManager.class);
 			// see customizer
 			assertThat(cacheManager.getCacheNames()).containsOnly("foo", "custom1");
 		}
@@ -690,7 +697,7 @@ public class CacheAutoConfigurationTests {
 
 	private void load(Class<?>[] configs, String... environment) {
 		AnnotationConfigApplicationContext applicationContext = new AnnotationConfigApplicationContext();
-		EnvironmentTestUtils.addEnvironment(applicationContext, environment);
+		TestPropertyValues.of(environment).applyTo(applicationContext);
 		applicationContext.register(configs);
 		applicationContext.register(CacheAutoConfiguration.class);
 		applicationContext.refresh();

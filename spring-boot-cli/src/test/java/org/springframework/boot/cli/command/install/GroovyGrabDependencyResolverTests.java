@@ -81,6 +81,11 @@ public class GroovyGrabDependencyResolverTests {
 				return new String[] { "." };
 			}
 
+			@Override
+			public boolean isQuiet() {
+				return false;
+			}
+
 		};
 		this.resolver = new GroovyGrabDependencyResolver(configuration);
 	}
@@ -105,10 +110,11 @@ public class GroovyGrabDependencyResolverTests {
 	@Test
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public void resolveShorthandArtifactWithDependencies() throws Exception {
-		List<File> resolved = this.resolver.resolve(Arrays.asList("spring-core"));
-		assertThat(resolved).hasSize(2);
-		assertThat(getNames(resolved)).has((Condition) Matched.by(
-				hasItems(startsWith("commons-logging-"), startsWith("spring-core-"))));
+		List<File> resolved = this.resolver.resolve(Arrays.asList("spring-beans"));
+		assertThat(resolved).hasSize(3);
+		assertThat(getNames(resolved))
+				.has((Condition) Matched.by(hasItems(startsWith("spring-core-"),
+						startsWith("spring-beans-"), startsWith("spring-jcl-"))));
 	}
 
 	@Test
